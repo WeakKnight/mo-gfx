@@ -7,7 +7,7 @@ class Surface;
 class Device
 {
 public:
-	Device(VkPhysicalDevice physicalDevice, std::shared_ptr<Surface> surface);
+	Device(VkPhysicalDevice physicalDevice, std::shared_ptr<Surface> surface, std::vector<const char*> requiredExtensions);
 	~Device();
 
 	VkDevice GetApiHandle() const
@@ -15,7 +15,29 @@ public:
 		return m_apiHandle;
 	}
 
+	VkQueue GetGraphicsQueue() const
+	{
+		return m_graphicsQueue;
+	}
+
+	VkQueue GetTransferQueue() const
+	{
+		return m_transferQueue;
+	}
+
+	VkQueue GetComputeQueue() const
+	{
+		return m_computeQueue;
+	}
+
+	VkQueue GetPresentQueue() const
+	{
+		return m_presentQueue;
+	}
+
 private:
+
+	bool CheckExtensionSupport() const;
 
 	VkPhysicalDevice m_physicalDevice = VK_NULL_HANDLE;
 
@@ -31,4 +53,6 @@ private:
 
 	VkDevice m_apiHandle = VK_NULL_HANDLE;
 	std::shared_ptr<Surface> m_surface;
+
+	std::vector<const char*> m_requiredExtensions;
 };

@@ -2,10 +2,11 @@
 #include "surface.h"
 #include <set>
 
-Device::Device(VkPhysicalDevice physicalDevice, std::shared_ptr<Surface> surface)
+Device::Device(VkPhysicalDevice physicalDevice, std::shared_ptr<Surface> surface, std::vector<const char*> requiredExtensions)
 {
 	m_physicalDevice = physicalDevice;
 	m_surface = surface;
+	m_requiredExtensions = requiredExtensions;
 
 	uint32_t queueFamilyCount = 0;
 	vkGetPhysicalDeviceQueueFamilyProperties(m_physicalDevice, &queueFamilyCount, nullptr);
@@ -55,12 +56,15 @@ Device::Device(VkPhysicalDevice physicalDevice, std::shared_ptr<Surface> surface
 
 	VkPhysicalDeviceFeatures deviceFeatures = {};
 
+	assert(CheckExtensionSupport(), true);
+
 	VkDeviceCreateInfo createInfo = {};
 	createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
 	createInfo.pQueueCreateInfos = queueCreateInfos.data();
 	createInfo.queueCreateInfoCount = queueCreateInfos.size();
 	createInfo.pEnabledFeatures = &deviceFeatures;
-	createInfo.enabledExtensionCount = 0;
+	createInfo.enabledExtensionCount = m_requiredExtensions.size();
+	createInfo.ppEnabledExtensionNames = m_requiredExtensions.data();
 	createInfo.enabledLayerCount = 0;
 
 	VkResult result = vkCreateDevice(physicalDevice, &createInfo, nullptr, &m_apiHandle);
@@ -78,4 +82,35 @@ Device::~Device()
 	{
 		vkDestroyDevice(m_apiHandle, nullptr);
 	}
+}
+
+bool Device::CheckExtensionSupport() const
+{
+	uint32_t extensionCount;
+	vkEnumerateDeviceExtensionProperties(m_physicalDevice, nullptr, &extensionCount, nullptr);
+
+	std::vector<VkExtensionProperties> availableExtensions(extensionCount);
+	vkEnumerateDeviceExtensionProperties(m_physicalDevice, nullptr, &extensionCount, availableExtensions.data());
+
+	bool result = true;
+
+	for (auto requiredExtension : m_requiredExtensions)
+	{
+		bool hadThis = false;
+		for (auto availableExtension : availableExtensions)
+		{
+			if (strcmp(availableExtension.extensionName, requiredExtension))
+			{
+				hadThis = true;
+			}
+		}
+
+		if (!hadThis)
+		{
+			result = false;
+			break;
+		}
+	}
+
+	return result;
 }
