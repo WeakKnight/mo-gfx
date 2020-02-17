@@ -20,4 +20,5 @@ private:
 	std::shared_ptr<Instance> m_instance;
 	std::shared_ptr<Device> m_device;
 	std::shared_ptr<Surface> m_surface;
+	std::shared_ptr<SwapChain> m_swapChain;
 };

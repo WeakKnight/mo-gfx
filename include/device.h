@@ -35,6 +35,31 @@ public:
 		return m_presentQueue;
 	}
 
+	uint32_t GetGraphicsQueueIndex() const
+	{
+		return m_graphicsFamilyIndex;
+	}
+
+	uint32_t GetComputeQueueIndex() const
+	{
+		return m_computeFamilyIndex;
+	}
+
+	uint32_t GetTransferQueueIndex() const
+	{
+		return m_transferFamilyIndex;
+	}
+
+	uint32_t GetPresentQueueIndex() const
+	{
+		return m_presentFamilyIndex;
+	}
+
+	VkPhysicalDevice GetPhysicalDevice() const
+	{
+		return m_physicalDevice;
+	}
+
 private:
 
 	bool CheckExtensionSupport() const;
