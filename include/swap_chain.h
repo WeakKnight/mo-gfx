@@ -4,6 +4,8 @@
 
 class Device;
 class Surface;
+class Image;
+class ImageView;
 
 class SwapChain
 {
@@ -26,6 +28,9 @@ private:
 
 	std::shared_ptr<Surface> m_surface;
 	std::shared_ptr<Device> m_device;
+	std::vector<std::shared_ptr<Image>> m_images;
+	std::vector<std::shared_ptr<ImageView>> m_imageViews;
+
 	VkSwapchainKHR m_apiHandle = VK_NULL_HANDLE;
 
 	VkSurfaceCapabilitiesKHR m_capabilities;

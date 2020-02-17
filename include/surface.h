@@ -17,6 +17,7 @@ public:
 	}
 
 private:
+
 	GLFWwindow* m_window = nullptr;
 	VkSurfaceKHR m_apiHandle = VK_NULL_HANDLE;
 	VkInstance m_instance = VK_NULL_HANDLE;

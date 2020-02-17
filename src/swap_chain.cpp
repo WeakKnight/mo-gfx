@@ -1,6 +1,8 @@
 #include "swap_chain.h"
 #include "device.h"
 #include "surface.h"
+#include "image.h"
+#include "image_view.h"
 
 SwapChain::SwapChain(std::shared_ptr<Device> device, std::shared_ptr<Surface> surface)
 {
@@ -44,6 +46,19 @@ SwapChain::SwapChain(std::shared_ptr<Device> device, std::shared_ptr<Surface> su
 
 	VkResult result = vkCreateSwapchainKHR(m_device->GetApiHandle(), &createInfo, nullptr, &m_apiHandle);
 	assert(result == VK_SUCCESS);
+
+	uint32_t imageCount;
+	std::vector<VkImage> swapChainImages;
+	vkGetSwapchainImagesKHR(m_device->GetApiHandle(), m_apiHandle, &imageCount, nullptr);
+	swapChainImages.resize(imageCount);
+	vkGetSwapchainImagesKHR(m_device->GetApiHandle(), m_apiHandle, &imageCount, swapChainImages.data());
+
+	for (auto& swapChainImage : swapChainImages)
+	{
+		auto image = std::make_shared<Image>(m_device, swapChainImage);
+		m_images.push_back(image);
+		m_imageViews.push_back(std::make_shared<ImageView>(m_device, image, m_format.format, VK_IMAGE_VIEW_TYPE_2D));
+	}
 }
 
 SwapChain::~SwapChain()
