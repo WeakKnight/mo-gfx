@@ -18,6 +18,11 @@ public:
 		return m_apiHandle;
 	}
 
+	VkExtent2D GetExtent() const
+	{
+		return m_extent;
+	}
+
 private:
 
 	void InitSupportInfo();
