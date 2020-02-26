@@ -5,11 +5,6 @@
 const int WIDTH = 800;
 const int HEIGHT = 600;
 
-std::vector<const char*> requiredExtensions =
-{
-	VK_KHR_SWAPCHAIN_EXTENSION_NAME
-};
-
 void App::Run()
 {
 	InitWindow();
@@ -41,10 +36,6 @@ void App::InitVulkan()
 	"VK_LAYER_KHRONOS_validation"
 	};
 
-	m_instance = std::make_shared<Instance>(extensions, validationLayers);
-	m_surface = std::make_shared<Surface>(m_instance, m_window);
-	m_device = std::make_shared<Device>(m_instance->GetPhysicalDevice(), m_surface, requiredExtensions);
-	m_swapChain = std::make_shared<SwapChain>(m_device, m_surface);
 }
 
 void App::MainLoop()
