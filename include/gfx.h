@@ -63,9 +63,58 @@ namespace GFX
         GLFWwindow* window = nullptr;
     };
 
+    struct Buffer
+    {
+        uint32_t id = 0;
+    };
+
+    struct Image
+    {
+        uint32_t id = 0;
+    };
+
+    enum class ShaderStage
+    {
+        Vertex,
+        Fragment,
+        Compute,
+        None
+    };
+
+    struct ShaderDescription
+    {
+        ShaderStage stage = ShaderStage::None;
+        std::string codes = "";
+        std::string name = "";
+    };
+
+    struct Shader
+    {
+        uint32_t id = 0;
+    };
+
+    enum class PrimitiveTopology
+    {
+        TriangleList,
+        TriangleStrip,
+        LineList,
+        LineStrip,
+        PointList
+    };
+
+    struct Bindings
+    {
+        Buffer vertexBuffer;
+        Buffer indexBuffer;
+        std::vector<Image> vertexImages;
+        std::vector<Image> fragImages;
+    };
+
     struct PipelineDescription
     {
-
+        std::vector<Shader> shaders;
+        PrimitiveTopology primitiveTopology;
+        Bindings bindings;
     };
 
     struct Pipeline
@@ -73,15 +122,11 @@ namespace GFX
         uint32_t id = 0;
     };
 
-    struct Shader
-    {
-
-    };
-    
-
     void Init(const InitialDescription& desc);
 
     Pipeline CreatePipeline(const PipelineDescription& desc);
+    Shader CreateShader(const ShaderDescription& desc);
+    void DestroyShader(const Shader& shader);
 
     void Submit();
 

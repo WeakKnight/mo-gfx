@@ -2,6 +2,8 @@
 #define VULKAN_HPP_NO_EXCEPTIONS
 #include <vulkan/vulkan.hpp>
 #include <GLFW/glfw3.h>
+#include <shaderc/shaderc.hpp>
+#include <spdlog/spdlog.h>
 
 #define VK_ASSERT(resultObj) assert(resultObj.result == vk::Result::eSuccess)
 
@@ -11,8 +13,8 @@ namespace GFX
     ===========================================Internal Struct Declaration========================================================
     */
 
-    struct SwapChainSupportDetails;
     struct PipelineResource;
+    struct ShaderResource;
 
     /*
     ===================================================Static Global Variables====================================================
@@ -22,6 +24,7 @@ namespace GFX
     Handle Pools
     */
     static HandlePool<PipelineResource> s_pipelineHandlePool = HandlePool<PipelineResource>(200);
+    static HandlePool<ShaderResource> s_shaderHandlePool = HandlePool<ShaderResource>(200);
 
     /*
     Device Instance
@@ -86,16 +89,201 @@ namespace GFX
     ===========================================Internal Struct Definition===================================================
     */
 
+    struct ShaderResource
+    {
+        ShaderResource(const ShaderDescription& desc)
+        {
+            shaderc_shader_kind shaderKind = MapShaderStageForShaderc(desc.stage);
+            std::vector<uint32_t> spirvCodes = CompileFile(desc.name, shaderKind, desc.codes, false);
+
+            vk::ShaderModuleCreateInfo createInfo = {};
+            createInfo.setCodeSize(spirvCodes.size() * sizeof(uint32_t));
+            createInfo.setPCode(spirvCodes.data());
+
+            auto createShaderModuleResult = s_device.createShaderModule(createInfo);
+            VK_ASSERT(createShaderModuleResult);
+            m_shaderModule = createShaderModuleResult.value;
+
+            m_shaderStage = desc.stage;
+        }
+
+        ~ShaderResource()
+        {
+            s_device.destroyShaderModule(m_shaderModule);
+        }
+
+        shaderc_shader_kind MapShaderStageForShaderc(const ShaderStage& stage)
+        {
+            switch (stage)
+            {
+            case ShaderStage::Vertex:
+                return shaderc_shader_kind::shaderc_vertex_shader;
+            case ShaderStage::Compute:
+                return shaderc_shader_kind::shaderc_compute_shader;
+            case ShaderStage::Fragment:
+                return shaderc_shader_kind::shaderc_fragment_shader;
+            default:
+                return shaderc_shader_kind::shaderc_glsl_infer_from_source;
+            }
+        }
+
+        vk::ShaderStageFlagBits MapShaderStageForVulkan(const ShaderStage& stage)
+        {
+            switch (stage)
+            {
+            case ShaderStage::Vertex:
+                return vk::ShaderStageFlagBits::eVertex;
+            case ShaderStage::Compute:
+                return vk::ShaderStageFlagBits::eCompute;
+            case ShaderStage::Fragment:
+                return vk::ShaderStageFlagBits::eFragment;
+            default:
+                return vk::ShaderStageFlagBits::eAll;
+            }
+        }
+
+        vk::PipelineShaderStageCreateInfo GetShaderStageCreateInfo()
+        {
+            vk::PipelineShaderStageCreateInfo shaderStageCreateInfo = {};
+            shaderStageCreateInfo.setStage(MapShaderStageForVulkan(m_shaderStage));
+            shaderStageCreateInfo.setModule(m_shaderModule);
+            shaderStageCreateInfo.setPName("main");
+
+            return shaderStageCreateInfo;
+        }
+
+        std::vector<uint32_t> CompileFile(const std::string& sourceName,
+            shaderc_shader_kind kind,
+            const std::string& source,
+            bool optimize)
+        {
+            shaderc::Compiler compiler;
+            shaderc::CompileOptions options;
+
+            // Like -DMY_DEFINE=1
+            options.AddMacroDefinition("MY_DEFINE", "1");
+            if (optimize)
+                options.SetOptimizationLevel(shaderc_optimization_level_size);
+
+            shaderc::SpvCompilationResult module =
+                compiler.CompileGlslToSpv(source, kind, sourceName.c_str(), options);
+
+            auto status = module.GetCompilationStatus();
+            if (status != shaderc_compilation_status_success)
+            {
+                std::string errorMsg = module.GetErrorMessage();
+                spdlog::error("Shader Compiling Failed. Error: {}", errorMsg);
+                if (status == shaderc_compilation_status_invalid_stage)
+                {
+                    spdlog::error("Wrong Shader Stage");
+                }
+                return std::vector<uint32_t>();
+            }
+
+            return { module.cbegin(), module.cend() };
+        }
+
+        uint32_t handle = 0;
+        vk::ShaderModule m_shaderModule = nullptr;
+        ShaderStage m_shaderStage = ShaderStage::None;
+    };
+
     struct PipelineResource
     {
         PipelineResource(const PipelineDescription& desc)
         {
+            std::vector<vk::PipelineShaderStageCreateInfo> shaderStageCreateInfos = {};
+            for (auto shader : desc.shaders)
+            {
+                ShaderResource* shaderResource = s_shaderHandlePool.FetchResource(shader.id);
+                shaderStageCreateInfos.push_back(shaderResource->GetShaderStageCreateInfo());
+            }
 
+            vk::PipelineVertexInputStateCreateInfo vertexInputStateCreateInfo = {};
+            vertexInputStateCreateInfo.setVertexBindingDescriptionCount(0);
+            vertexInputStateCreateInfo.setVertexAttributeDescriptionCount(0);
+
+            vk::PipelineInputAssemblyStateCreateInfo inputAssemblyStateCreateInfo = {};
+            inputAssemblyStateCreateInfo.setTopology(MapPrimitiveTopologyForVulkan(desc.primitiveTopology));
+            inputAssemblyStateCreateInfo.setPrimitiveRestartEnable(false);
+
+            vk::Viewport viewPort = {};
+            viewPort.setX(0.0f);
+            viewPort.setY(0.0f);
+            viewPort.setWidth(s_swapChainImageExtent.width);
+            viewPort.setHeight(s_swapChainImageExtent.height);
+            viewPort.setMinDepth(0.0f);
+            viewPort.setMaxDepth(1.0f);
+
+            vk::Rect2D scissor = {};
+            scissor.setOffset({ 0, 0 });
+            scissor.setExtent(s_swapChainImageExtent);
+
+            vk::PipelineViewportStateCreateInfo viewportStateCreateInfo = {};
+            viewportStateCreateInfo.setViewportCount(1);
+            viewportStateCreateInfo.setPViewports(&viewPort);
+            viewportStateCreateInfo.setScissorCount(1);
+            viewportStateCreateInfo.setPScissors(&scissor);
+
+            vk::PipelineRasterizationStateCreateInfo rasterizationStateCreateInfo = {};
+            rasterizationStateCreateInfo.setDepthClampEnable(false);
+            rasterizationStateCreateInfo.setRasterizerDiscardEnable(false);
+            rasterizationStateCreateInfo.setPolygonMode(vk::PolygonMode::eFill);
+            rasterizationStateCreateInfo.setLineWidth(1.0f);
+            rasterizationStateCreateInfo.setCullMode(vk::CullModeFlagBits::eBack);
+            rasterizationStateCreateInfo.setFrontFace(vk::FrontFace::eClockwise);
+            rasterizationStateCreateInfo.setDepthBiasEnable(false);
+
+            vk::PipelineMultisampleStateCreateInfo multisampleStateCreateInfo = {};
+            multisampleStateCreateInfo.setSampleShadingEnable(false);
+            multisampleStateCreateInfo.setRasterizationSamples(vk::SampleCountFlagBits::e1);
+
+            vk::PipelineColorBlendAttachmentState colorBlendAttachmentState = {};
+            colorBlendAttachmentState.setColorWriteMask(vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA);
+            colorBlendAttachmentState.setBlendEnable(false);
+
+            vk::PipelineColorBlendStateCreateInfo colorBlendStateCreateInfo = {};
+            colorBlendStateCreateInfo.setLogicOpEnable(false);
+            colorBlendStateCreateInfo.setAttachmentCount(1);
+            colorBlendStateCreateInfo.setPAttachments(&colorBlendAttachmentState);
+
+            std::vector<vk::DynamicState> dynamicStates =
+            {
+                vk::DynamicState::eViewport,
+            };
+
+            vk::PipelineDynamicStateCreateInfo dynamicStateCreateInfo = {};
+            dynamicStateCreateInfo.setDynamicStateCount(dynamicStates.size());
+            dynamicStateCreateInfo.setPDynamicStates(dynamicStates.data());
+            
+            vk::PipelineLayoutCreateInfo layoutCreateInfo = {};
+            
+            
         }
 
         ~PipelineResource()
         {
             s_device.destroyPipeline(m_pipeline);
+        }
+
+        vk::PrimitiveTopology MapPrimitiveTopologyForVulkan(const PrimitiveTopology& primitiveTopology)
+        {
+            switch (primitiveTopology)
+            {
+            case PrimitiveTopology::PointList:
+                return vk::PrimitiveTopology::ePointList;
+            case PrimitiveTopology::LineList:
+                return vk::PrimitiveTopology::eLineList;
+            case PrimitiveTopology::LineStrip:
+                return vk::PrimitiveTopology::eLineStrip;
+            case PrimitiveTopology::TriangleList:
+                return vk::PrimitiveTopology::eTriangleList;
+            case PrimitiveTopology::TriangleStrip:
+                return vk::PrimitiveTopology::eTriangleStrip;
+            default:
+                assert(false);
+                return vk::PrimitiveTopology::eTriangleList;
+            }
         }
 
         uint32_t handle = 0;
@@ -124,15 +312,41 @@ namespace GFX
     */
 
     /*
-    Resource Creation
+    Resource Management
     */
+
     Pipeline CreatePipeline(const PipelineDescription& desc)
     {
         Pipeline result = Pipeline();
+        
         PipelineResource* pipelineResource = new PipelineResource(desc);
         result.id = s_pipelineHandlePool.AllocateHandle(pipelineResource);
+        
+        pipelineResource->handle = result.id;
+
         return result;
     }
+
+    Shader CreateShader(const ShaderDescription& desc)
+    {
+        Shader result = Shader();
+
+        ShaderResource* shaderResource = new ShaderResource(desc);
+        result.id = s_shaderHandlePool.AllocateHandle(shaderResource);
+
+        shaderResource->handle = result.id;
+
+        return result;
+    }
+
+    void DestroyShader(const Shader& shader)
+    {
+        s_shaderHandlePool.FreeHandle(shader.id);
+    }
+
+    /*
+    Life Cycle
+    */
 
     void Init(const InitialDescription& desc)
     {

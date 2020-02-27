@@ -2,9 +2,13 @@
 #include <GLFW/glfw3.h>
 #include <spdlog/spdlog.h>
 #include "gfx.h"
+#include "string_utils.h"
 
 const int WIDTH = 800;
 const int HEIGHT = 600;
+
+static GFX::Shader vertShader;
+static GFX::Shader fragShader;
 
 void App::Run()
 {
@@ -29,6 +33,19 @@ void App::Init()
 	initDesc.window = m_window;
 
 	GFX::Init(initDesc);
+
+	GFX::ShaderDescription vertDesc = {};
+	vertDesc.name = "default";
+	vertDesc.codes = StringUtils::ReadFile("default.vert");
+	vertDesc.stage = GFX::ShaderStage::Vertex;
+
+	GFX::ShaderDescription fragDesc = {};
+	fragDesc.name = "default";
+	fragDesc.codes = StringUtils::ReadFile("default.frag");
+	fragDesc.stage = GFX::ShaderStage::Fragment;
+
+	vertShader = GFX::CreateShader(vertDesc);
+	fragShader = GFX::CreateShader(fragDesc);
 }
 
 void App::MainLoop()
@@ -41,6 +58,9 @@ void App::MainLoop()
 
 void App::CleanUp()
 {
+	GFX::DestroyShader(vertShader);
+	GFX::DestroyShader(fragShader);
+
 	GFX::Shutdown();
 
 	glfwDestroyWindow(m_window);
