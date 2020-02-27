@@ -1,21 +1,21 @@
 #include "app.h"
 #include <GLFW/glfw3.h>
 #include <spdlog/spdlog.h>
+#include "gfx.h"
 
 const int WIDTH = 800;
 const int HEIGHT = 600;
 
 void App::Run()
 {
-	InitWindow();
-	InitVulkan();
+	Init();
 
 	MainLoop();
 
 	CleanUp();
 }
 
-void App::InitWindow()
+void App::Init()
 {
 	glfwInit();
 
@@ -23,19 +23,12 @@ void App::InitWindow()
 	glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
 	
 	m_window = glfwCreateWindow(WIDTH, HEIGHT, "Vulkan", nullptr, nullptr);
-}
 
-void App::InitVulkan()
-{
-	uint32_t glfwExtensionCount = 0;
-	const char** glfwExtensions;
-	glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
-	std::vector<std::string> extensions(glfwExtensions, glfwExtensions + glfwExtensionCount);
+	GFX::InitialDescription initDesc = {};
+	initDesc.debugMode = true;
+	initDesc.window = m_window;
 
-	const std::vector<std::string> validationLayers = {
-	"VK_LAYER_KHRONOS_validation"
-	};
-
+	GFX::Init(initDesc);
 }
 
 void App::MainLoop()
@@ -48,6 +41,8 @@ void App::MainLoop()
 
 void App::CleanUp()
 {
+	GFX::Shutdown();
+
 	glfwDestroyWindow(m_window);
 	glfwTerminate();
 }

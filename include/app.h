@@ -9,8 +9,7 @@ public:
 	void Run();
 
 private:
-	void InitWindow();
-	void InitVulkan();
+	void Init();
 	void MainLoop();
 	void CleanUp();
 
