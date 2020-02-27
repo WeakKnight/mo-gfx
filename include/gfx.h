@@ -15,5 +15,7 @@ namespace GFX
 
     void Submit();
 
+    void Frame();
+
     void Shutdown();
 };

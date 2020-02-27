@@ -42,7 +42,15 @@ namespace GFX
     Swap Chain
     */
     static SwapChainSupportDetails s_swapChainSupportDetails;
+    static vk::SwapchainKHR s_swapChain = nullptr;
+    std::vector<VkImage> s_swapChainImages;
+    vk::Format s_swapChainImageFormat;
+    vk::Extent2D s_swapChainImageExtent;
+    std::vector<VkImageView> s_swapChainImageViews;
 
+    /*
+    Extension And Layer Info
+    */
     static std::vector<const char*> s_expectedLayers = 
     {
     };
@@ -88,6 +96,130 @@ namespace GFX
 
         assert(physicalDevices.size() >= 1);
         return physicalDevices[0];
+    }
+
+    vk::SurfaceFormatKHR ChooseSurfaceFormat(const std::vector<vk::SurfaceFormatKHR>& availableFormats)
+    {
+        for (auto format : availableFormats)
+        {
+            if (format.format == vk::Format::eB8G8R8A8Srgb && format.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear)
+            {
+                return format;
+            }
+        }
+
+        return availableFormats[0];
+    }
+
+    vk::PresentModeKHR ChoosePresentMode(const std::vector<vk::PresentModeKHR>& availablePresentModes)
+    {
+        for (auto presentMode : availablePresentModes)
+        {
+            if (presentMode == vk::PresentModeKHR::eMailbox)
+            {
+                return presentMode;
+            }
+        }
+
+        return vk::PresentModeKHR::eFifo;
+    }
+
+    vk::Extent2D ChooseSwapExtent(const vk::SurfaceCapabilitiesKHR& capabilities)
+    {
+        assert(capabilities.currentExtent.width != UINT32_MAX);
+        return capabilities.currentExtent;
+    }
+
+    void CreateSwapChain()
+    {
+        // Query Swap Chain Info
+        auto getSurfaceCapabilityiesResult = s_physicalDevice.getSurfaceCapabilitiesKHR(s_surface);
+        VK_ASSERT(getSurfaceCapabilityiesResult);
+        s_swapChainSupportDetails.capabilities = getSurfaceCapabilityiesResult.value;
+        auto getSurfaceFormatsResult = s_physicalDevice.getSurfaceFormatsKHR(s_surface);
+        VK_ASSERT(getSurfaceFormatsResult);
+        s_swapChainSupportDetails.formats = getSurfaceFormatsResult.value;
+        auto getSurfacePresentModesResult = s_physicalDevice.getSurfacePresentModesKHR(s_surface);
+        VK_ASSERT(getSurfacePresentModesResult);
+        s_swapChainSupportDetails.presentModes = getSurfacePresentModesResult.value;
+        assert(s_swapChainSupportDetails.IsAdequate());
+
+        vk::SurfaceFormatKHR surfaceFormat = ChooseSurfaceFormat(s_swapChainSupportDetails.formats);
+        vk::PresentModeKHR presentMode = ChoosePresentMode(s_swapChainSupportDetails.presentModes);
+        vk::Extent2D extent = ChooseSwapExtent(s_swapChainSupportDetails.capabilities);
+
+        uint32_t imageCount = s_swapChainSupportDetails.capabilities.minImageCount + 1;
+        if (s_swapChainSupportDetails.capabilities.maxImageCount > 0 && imageCount > s_swapChainSupportDetails.capabilities.maxImageCount)
+        {
+            imageCount = s_swapChainSupportDetails.capabilities.maxImageCount;
+        }
+
+        vk::SwapchainCreateInfoKHR createInfo = {};
+        createInfo.setSurface(s_surface);
+        createInfo.setMinImageCount(imageCount);
+        createInfo.setImageFormat(surfaceFormat.format);
+        createInfo.setImageColorSpace(surfaceFormat.colorSpace);
+        createInfo.setImageExtent(extent);
+        createInfo.setImageArrayLayers(1);
+        createInfo.setImageUsage(vk::ImageUsageFlagBits::eColorAttachment);
+
+        uint32_t queueFamilyIndices[] = { s_graphicsFamily, s_presentFamily };
+
+        if (s_graphicsFamily != s_presentFamily)
+        {
+            createInfo.setImageSharingMode(vk::SharingMode::eConcurrent);
+            createInfo.setQueueFamilyIndexCount(2);
+            createInfo.setPQueueFamilyIndices(queueFamilyIndices);
+        }
+        else
+        {
+            createInfo.setImageSharingMode(vk::SharingMode::eExclusive);
+        }
+
+        createInfo.setPreTransform(s_swapChainSupportDetails.capabilities.currentTransform);
+        createInfo.setCompositeAlpha(vk::CompositeAlphaFlagBitsKHR::eOpaque);
+        createInfo.setPresentMode(presentMode);
+        createInfo.setClipped(true);
+        createInfo.setOldSwapchain(nullptr);
+
+        auto createSwapChainResult = s_device.createSwapchainKHR(createInfo);
+        VK_ASSERT(createSwapChainResult);
+        s_swapChain = createSwapChainResult.value;
+        
+        vkGetSwapchainImagesKHR(s_device, s_swapChain, &imageCount, nullptr);
+        s_swapChainImages.resize(imageCount);
+        vkGetSwapchainImagesKHR(s_device, s_swapChain, &imageCount, s_swapChainImages.data());
+
+        s_swapChainImageFormat = surfaceFormat.format;
+        s_swapChainImageExtent = extent;
+    }
+
+    void CreateImageViews()
+    {
+        for (size_t i = 0; i < s_swapChainImages.size(); i++)
+        {
+            vk::ImageViewCreateInfo createInfo = {};
+            createInfo.setImage(s_swapChainImages[i]);
+            createInfo.setViewType(vk::ImageViewType::e2D);
+            createInfo.setFormat(s_swapChainImageFormat);
+
+            vk::ComponentMapping componentMapping = {};
+
+            createInfo.setComponents(componentMapping);
+
+            vk::ImageSubresourceRange subResourceRange = {};
+            subResourceRange.setAspectMask(vk::ImageAspectFlagBits::eColor);
+            subResourceRange.setBaseMipLevel(0);
+            subResourceRange.setLevelCount(1);
+            subResourceRange.setBaseArrayLayer(0);
+            subResourceRange.setLayerCount(1);
+
+            createInfo.setSubresourceRange(subResourceRange);
+
+            auto createImageViewResult = s_device.createImageView(createInfo);
+            VK_ASSERT(createImageViewResult);
+            s_swapChainImageViews.push_back(createImageViewResult.value);
+        }
     }
 
     void Init(const InitialDescription& desc)
@@ -202,17 +334,8 @@ namespace GFX
         s_graphicsQueueDefault = s_device.getQueue(s_graphicsFamily, 0);
         s_presentQueueDefault = s_device.getQueue(s_presentFamily, 0);
 
-        // Query Swap Chain Info
-        auto getSurfaceCapabilityiesResult = s_physicalDevice.getSurfaceCapabilitiesKHR(s_surface);
-        VK_ASSERT(getSurfaceCapabilityiesResult);
-        s_swapChainSupportDetails.capabilities = getSurfaceCapabilityiesResult.value;
-        auto getSurfaceFormatsResult = s_physicalDevice.getSurfaceFormatsKHR(s_surface);
-        VK_ASSERT(getSurfaceFormatsResult);
-        s_swapChainSupportDetails.formats = getSurfaceFormatsResult.value;
-        auto getSurfacePresentModesResult = s_physicalDevice.getSurfacePresentModesKHR(s_surface);
-        VK_ASSERT(getSurfacePresentModesResult);
-        s_swapChainSupportDetails.presentModes = getSurfacePresentModesResult.value;   
-        assert(s_swapChainSupportDetails.IsAdequate());
+        CreateSwapChain();
+        CreateImageViews();
     }
 
     void Submit()
@@ -220,8 +343,19 @@ namespace GFX
 
     }
 
+    void Frame()
+    {
+
+    }
+
     void Shutdown()
     {
+        for (auto imageView : s_swapChainImageViews)
+        {
+            vkDestroyImageView(s_device, imageView, nullptr);
+        }
+
+        vkDestroySwapchainKHR(s_device, s_swapChain, nullptr);
         vkDestroySurfaceKHR(s_instance, s_surface, nullptr);
         s_device.destroy();
         s_instance.destroy();
