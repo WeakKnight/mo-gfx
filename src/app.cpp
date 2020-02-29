@@ -60,13 +60,17 @@ void App::MainLoop()
 	while (!glfwWindowShouldClose(m_window)) 
 	{
 		glfwPollEvents();
+
 		GFX::BeginFrame();
+		
 		GFX::BeginDefaultRenderPass();
+
 		GFX::SetViewport(0, 0, WIDTH, HEIGHT);
 		GFX::ApplyPipeline(pipeline);
 		GFX::Draw(3, 1, 0, 0);
 		
 		GFX::EndRenderPass();
+		
 		GFX::EndFrame();
 	}
 }
