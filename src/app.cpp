@@ -9,6 +9,7 @@ const int HEIGHT = 600;
 
 static GFX::Shader vertShader;
 static GFX::Shader fragShader;
+static GFX::Pipeline pipeline;
 
 void App::Run()
 {
@@ -46,6 +47,12 @@ void App::Init()
 
 	vertShader = GFX::CreateShader(vertDesc);
 	fragShader = GFX::CreateShader(fragDesc);
+
+	GFX::GraphicsPipelineDescription pipelineDesc = {};
+	pipelineDesc.primitiveTopology = GFX::PrimitiveTopology::TriangleList;
+	pipelineDesc.shaders.push_back(vertShader);
+	pipelineDesc.shaders.push_back(fragShader);
+	pipeline = GFX::CreatePipeline(pipelineDesc);
 }
 
 void App::MainLoop()
@@ -53,11 +60,21 @@ void App::MainLoop()
 	while (!glfwWindowShouldClose(m_window)) 
 	{
 		glfwPollEvents();
+		GFX::BeginFrame();
+		GFX::BeginDefaultRenderPass();
+		GFX::SetViewport(0, 0, WIDTH, HEIGHT);
+		GFX::ApplyPipeline(pipeline);
+		GFX::Draw(3, 1, 0, 0);
+		
+		GFX::EndRenderPass();
+		GFX::EndFrame();
 	}
 }
 
 void App::CleanUp()
 {
+	GFX::DestroyPipeline(pipeline);
+
 	GFX::DestroyShader(vertShader);
 	GFX::DestroyShader(fragShader);
 

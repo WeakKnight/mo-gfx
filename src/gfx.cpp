@@ -15,7 +15,7 @@ namespace GFX
 
     struct PipelineResource;
     struct ShaderResource;
-
+    struct RenderPassResource;
     /*
     ===================================================Static Global Variables====================================================
     */
@@ -25,6 +25,7 @@ namespace GFX
     */
     static HandlePool<PipelineResource> s_pipelineHandlePool = HandlePool<PipelineResource>(200);
     static HandlePool<ShaderResource> s_shaderHandlePool = HandlePool<ShaderResource>(200);
+    static HandlePool<RenderPassResource> s_renderPassHandlePool = HandlePool<RenderPassResource>(200);
 
     /*
     Device Instance
@@ -73,6 +74,39 @@ namespace GFX
     vk::Extent2D s_swapChainImageExtent;
     std::vector<VkImageView> s_swapChainImageViews;
 
+    uint32_t s_currentImageIndex = 0;
+    uint32_t s_currentFrame = 0;
+    
+    /*
+    Default Render Pass
+    */
+    vk::RenderPass s_renderPassDefault = nullptr;
+
+    /*
+    Swap Chain Frame Buffers
+    */
+    std::vector<VkFramebuffer> s_swapChainFrameBuffers;
+
+    /*
+    Default Command Pool
+    */
+    vk::CommandPool s_commandPoolDefault = nullptr;
+
+    /*
+    Default Command Buffers For Swap Chain Frame Buffers
+    */
+    std::vector<vk::CommandBuffer> s_commandBuffersDefault;
+
+    /*
+    Sync Objects
+    */
+    const int MAX_FRAMES_IN_FLIGHT = 2;
+
+    std::vector<vk::Semaphore> s_imageAvailableSemaphores;
+    std::vector<vk::Semaphore> s_renderFinishedSemaphores;
+    std::vector<vk::Fence> s_inFlightFences;
+    std::vector<vk::Fence> s_imageFences;
+
     /*
     Extension And Layer Info
     */
@@ -86,8 +120,52 @@ namespace GFX
     };
 
     /*
+    ============================================Common Util Functions========================================================
+    */
+    vk::Format MapFormatForVulkan(const Format& format)
+    {
+        switch (format)
+        {
+        case Format::R32SF:
+            return vk::Format::eR32Sfloat;
+        case Format::R8G8B8A8:
+            return vk::Format::eR8G8B8A8Unorm;
+        case Format::R8G8B8:
+            return vk::Format::eR8G8B8Unorm;
+        case Format::R16G16B16A16F:
+            return vk::Format::eR16G16B16A16Sfloat;
+        case Format::R16G16B16F:
+            return vk::Format::eR16G16B16Sfloat;
+        case Format::R32G32B32A32F:
+            return vk::Format::eR32G32B32A32Sfloat;
+        case Format::R32G32B32F:
+            return vk::Format::eR32G32B32Sfloat;
+        default:
+            assert(false);
+            return vk::Format::eA1R5G5B5UnormPack16;
+        }
+    }
+
+    /*
     ===========================================Internal Struct Definition===================================================
     */
+
+    struct RenderPassResource
+    {
+        RenderPassResource(const RenderPassDescription)
+        {
+            vk::AttachmentDescription colorAttachment = {};
+            colorAttachment.setFormat(vk::Format::eR8G8B8A8Srgb);
+        }
+
+        ~RenderPassResource()
+        {
+            s_device.destroyRenderPass(m_renderPass);
+        }
+
+        vk::RenderPass m_renderPass = nullptr;
+        uint32_t handle = 0;
+    };
 
     struct ShaderResource
     {
@@ -190,7 +268,7 @@ namespace GFX
 
     struct PipelineResource
     {
-        PipelineResource(const PipelineDescription& desc)
+        PipelineResource(const GraphicsPipelineDescription& desc)
         {
             std::vector<vk::PipelineShaderStageCreateInfo> shaderStageCreateInfos = {};
             for (auto shader : desc.shaders)
@@ -234,6 +312,8 @@ namespace GFX
             rasterizationStateCreateInfo.setFrontFace(vk::FrontFace::eClockwise);
             rasterizationStateCreateInfo.setDepthBiasEnable(false);
 
+            vk::PipelineDepthStencilStateCreateInfo depthStencilStateCreateInfo = {};
+
             vk::PipelineMultisampleStateCreateInfo multisampleStateCreateInfo = {};
             multisampleStateCreateInfo.setSampleShadingEnable(false);
             multisampleStateCreateInfo.setRasterizationSamples(vk::SampleCountFlagBits::e1);
@@ -257,12 +337,33 @@ namespace GFX
             dynamicStateCreateInfo.setPDynamicStates(dynamicStates.data());
             
             vk::PipelineLayoutCreateInfo layoutCreateInfo = {};
-            
-            
+            auto createPipelineLayoutResult = s_device.createPipelineLayout(layoutCreateInfo);
+            VK_ASSERT(createPipelineLayoutResult);
+            m_pipelineLayout = createPipelineLayoutResult.value;
+
+            vk::GraphicsPipelineCreateInfo pipelineCreateInfo = {};
+            pipelineCreateInfo.setStageCount(shaderStageCreateInfos.size());
+            pipelineCreateInfo.setPStages(shaderStageCreateInfos.data());
+            pipelineCreateInfo.setPVertexInputState(&vertexInputStateCreateInfo);
+            pipelineCreateInfo.setPInputAssemblyState(&inputAssemblyStateCreateInfo);
+            pipelineCreateInfo.setPViewportState(&viewportStateCreateInfo);
+            pipelineCreateInfo.setPRasterizationState(&rasterizationStateCreateInfo);
+            pipelineCreateInfo.setPMultisampleState(&multisampleStateCreateInfo);
+            pipelineCreateInfo.setPDepthStencilState(&depthStencilStateCreateInfo);
+            pipelineCreateInfo.setPColorBlendState(&colorBlendStateCreateInfo);
+            pipelineCreateInfo.setPDynamicState(&dynamicStateCreateInfo);
+            pipelineCreateInfo.setLayout(m_pipelineLayout);
+            pipelineCreateInfo.setRenderPass(s_renderPassDefault);
+            pipelineCreateInfo.setSubpass(0);
+
+            auto createGraphicsPipelineResult = s_device.createGraphicsPipeline(nullptr, pipelineCreateInfo);
+            VK_ASSERT(createGraphicsPipelineResult);
+            m_pipeline = createGraphicsPipelineResult.value;
         }
 
         ~PipelineResource()
         {
+            s_device.destroyPipelineLayout(m_pipelineLayout);
             s_device.destroyPipeline(m_pipeline);
         }
 
@@ -288,6 +389,7 @@ namespace GFX
 
         uint32_t handle = 0;
         vk::Pipeline m_pipeline = nullptr;
+        vk::PipelineLayout m_pipelineLayout = nullptr;
     };
 
     /*
@@ -306,7 +408,11 @@ namespace GFX
 
     void CreateSwapChain();
     void CreateImageViews();
-
+    void CreateDefaultRenderPass();
+    void CreateSwapChainFramebuffers();
+    void CreateCommandPoolDefault();
+    void CreateCommandBuffersDefault();
+    void CreateSyncObjects();
     /*
     =================================================Implementation===========================================================
     */
@@ -315,7 +421,7 @@ namespace GFX
     Resource Management
     */
 
-    Pipeline CreatePipeline(const PipelineDescription& desc)
+    Pipeline CreatePipeline(const GraphicsPipelineDescription& desc)
     {
         Pipeline result = Pipeline();
         
@@ -339,9 +445,56 @@ namespace GFX
         return result;
     }
 
+    RenderPass CreateRenderPass(const RenderPassDescription& desc)
+    {
+        RenderPass result = RenderPass();
+
+        RenderPassResource* renderPassResource = new RenderPassResource(desc);
+        result.id = s_renderPassHandlePool.AllocateHandle(renderPassResource);
+
+        renderPassResource->handle = result.id;
+
+        return result;
+    }
+
     void DestroyShader(const Shader& shader)
     {
         s_shaderHandlePool.FreeHandle(shader.id);
+    }
+
+    void DestroyPipeline(const Pipeline& pipeline)
+    {
+        s_pipelineHandlePool.FreeHandle(pipeline.id);
+    }
+
+    void DestroyRenderPass(const RenderPass& renderPass)
+    {
+        s_renderPassHandlePool.FreeHandle(renderPass.id);
+    }
+
+    /*
+    Operations
+    */
+    void ApplyPipeline(Pipeline pipeline)
+    {
+        PipelineResource* pipelineResource = s_pipelineHandlePool.FetchResource(pipeline.id);
+        s_commandBuffersDefault[s_currentImageIndex].bindPipeline(vk::PipelineBindPoint::eGraphics, pipelineResource->m_pipeline);
+    }
+
+    void Draw(uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance)
+    {
+        s_commandBuffersDefault[s_currentImageIndex].draw(vertexCount, instanceCount, firstVertex, firstInstance);
+    }
+
+    void SetViewport(float x, float y, float w, float h)
+    {
+        vk::Viewport newViewport = {};
+        newViewport.setX(x);
+        newViewport.setY(y);
+        newViewport.setWidth(w);
+        newViewport.setHeight(h);
+
+        s_commandBuffersDefault[s_currentImageIndex].setViewport(0, 1, &newViewport);
     }
 
     /*
@@ -462,6 +615,11 @@ namespace GFX
 
         CreateSwapChain();
         CreateImageViews();
+        CreateDefaultRenderPass();
+        CreateSwapChainFramebuffers();
+        CreateCommandPoolDefault();
+        CreateCommandBuffersDefault();
+        CreateSyncObjects();
     }
 
     void Submit()
@@ -469,13 +627,125 @@ namespace GFX
 
     }
 
-    void Frame()
+    void BeginFrame()
     {
+        s_device.waitForFences(1, &s_inFlightFences[s_currentFrame], false, UINT64_MAX);
+        s_device.resetFences(1, &s_inFlightFences[s_currentFrame]);
 
+        auto acquireNextImageResult = s_device.acquireNextImageKHR(s_swapChain, UINT64_MAX, s_imageAvailableSemaphores[s_currentFrame], nullptr);
+        VK_ASSERT(acquireNextImageResult);
+
+        s_currentImageIndex = acquireNextImageResult.value;
+
+        if ((VkFence)(s_imageFences[s_currentImageIndex]) != VK_NULL_HANDLE)
+        {
+            s_device.waitForFences(1, &s_imageFences[s_currentImageIndex], true, UINT64_MAX);
+        }
+
+        s_imageFences[s_currentImageIndex] = s_inFlightFences[s_currentFrame];
+
+        vk::CommandBufferBeginInfo commandBufferBeginInfo = {};
+        commandBufferBeginInfo.setFlags(vk::CommandBufferUsageFlagBits::eOneTimeSubmit);
+
+        auto commandBufferBeginResult = s_commandBuffersDefault[s_currentImageIndex].begin(commandBufferBeginInfo);
+        assert(commandBufferBeginResult == vk::Result::eSuccess);
+    }
+
+    void BeginDefaultRenderPass()
+    {
+        vk::RenderPassBeginInfo renderPassBeginInfo = {};
+        
+        renderPassBeginInfo.setRenderPass(s_renderPassDefault);
+        renderPassBeginInfo.setFramebuffer(s_swapChainFrameBuffers[s_currentImageIndex]);
+        
+        vk::Rect2D area = {};
+        area.setExtent(s_swapChainImageExtent);
+        area.setOffset({ 0, 0 });
+        renderPassBeginInfo.setRenderArea(area);
+
+        vk::ClearColorValue colorValue = {};
+        colorValue.setFloat32({ 0.0f, 0.0f, 0.0f, 1.0f });
+        vk::ClearValue clearColor = {};
+        clearColor.setColor(colorValue);
+        renderPassBeginInfo.setClearValueCount(1);
+        renderPassBeginInfo.setPClearValues(&clearColor);
+        
+        s_commandBuffersDefault[s_currentImageIndex].beginRenderPass(renderPassBeginInfo, vk::SubpassContents::eInline);
+    }
+
+    void EndRenderPass()
+    {
+        s_commandBuffersDefault[s_currentImageIndex].endRenderPass();
+    }
+
+    void EndFrame()
+    {
+        s_commandBuffersDefault[s_currentImageIndex].end();
+
+        /*
+        Submit Commands
+        */
+        vk::SubmitInfo submitInfo = {};
+        
+        static vk::PipelineStageFlags waitStages[] = { vk::PipelineStageFlagBits::eColorAttachmentOutput };
+
+        submitInfo.setWaitSemaphoreCount(1);
+        submitInfo.setPWaitSemaphores(&s_imageAvailableSemaphores[s_currentFrame]);
+        submitInfo.setPWaitDstStageMask(waitStages);
+        submitInfo.setCommandBufferCount(1);
+        submitInfo.setPCommandBuffers(&s_commandBuffersDefault[s_currentImageIndex]);
+        submitInfo.setSignalSemaphoreCount(1);
+        submitInfo.setPSignalSemaphores(&s_renderFinishedSemaphores[s_currentFrame]);
+
+        s_device.resetFences(s_inFlightFences[s_currentFrame]);
+        auto submitResult = s_graphicsQueueDefault.submit(submitInfo, s_inFlightFences[s_currentFrame]);
+        assert(submitResult == vk::Result::eSuccess);
+
+        vk::PresentInfoKHR presentInfo = {};
+        presentInfo.setWaitSemaphoreCount(1);
+        presentInfo.setPWaitSemaphores(&s_renderFinishedSemaphores[s_currentFrame]);
+        presentInfo.setPSwapchains(&s_swapChain);
+        presentInfo.setPImageIndices(&s_currentImageIndex);
+        presentInfo.setSwapchainCount(1);
+
+        s_presentQueueDefault.presentKHR(presentInfo);
+
+        s_currentFrame = (s_currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
     }
 
     void Shutdown()
     {
+        s_device.waitIdle();
+
+        for (auto fence : s_inFlightFences)
+        {
+            s_device.destroyFence(fence);
+        }
+
+        for (auto fence : s_imageFences)
+        {
+            s_device.destroyFence(fence);
+        }
+
+        for (auto semaphore : s_imageAvailableSemaphores)
+        {
+            s_device.destroySemaphore(semaphore);
+        }
+
+        for (auto semaphore : s_renderFinishedSemaphores)
+        {
+            s_device.destroySemaphore(semaphore);
+        }
+
+        s_device.destroyCommandPool(s_commandPoolDefault);
+
+        for (auto framebuffer : s_swapChainFrameBuffers)
+        {
+            vkDestroyFramebuffer(s_device, framebuffer, nullptr);
+        }
+
+        s_device.destroyRenderPass(s_renderPassDefault);
+
         for (auto imageView : s_swapChainImageViews)
         {
             vkDestroyImageView(s_device, imageView, nullptr);
@@ -513,6 +783,46 @@ namespace GFX
             VK_ASSERT(createImageViewResult);
             s_swapChainImageViews.push_back(createImageViewResult.value);
         }
+    }
+
+    void CreateDefaultRenderPass()
+    {
+        vk::AttachmentDescription colorAttachment = {};
+        colorAttachment.setFormat(s_swapChainImageFormat);
+        colorAttachment.setSamples(vk::SampleCountFlagBits::e1);
+        colorAttachment.setLoadOp(vk::AttachmentLoadOp::eClear);
+        colorAttachment.setStoreOp(vk::AttachmentStoreOp::eStore);
+        colorAttachment.setStencilLoadOp(vk::AttachmentLoadOp::eDontCare);
+        colorAttachment.setInitialLayout(vk::ImageLayout::eUndefined);
+        colorAttachment.setFinalLayout(vk::ImageLayout::ePresentSrcKHR);
+
+        vk::AttachmentReference colorAttachmentRef = {};
+        colorAttachmentRef.setAttachment(0);
+        colorAttachmentRef.setLayout(vk::ImageLayout::eColorAttachmentOptimal);
+
+        vk::SubpassDescription subpassDescription = {};
+        subpassDescription.setPipelineBindPoint(vk::PipelineBindPoint::eGraphics);
+        subpassDescription.setColorAttachmentCount(1);
+        subpassDescription.setPColorAttachments(&colorAttachmentRef);
+
+        vk::SubpassDependency dependency = {};
+        dependency.setSrcSubpass(VK_SUBPASS_EXTERNAL);
+        dependency.setDstSubpass(0);
+        dependency.setSrcStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput);
+        dependency.setDstStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput);
+        dependency.setDstAccessMask(vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite);
+
+        vk::RenderPassCreateInfo renderPassCreateInfo = {};
+        renderPassCreateInfo.setAttachmentCount(1);
+        renderPassCreateInfo.setPAttachments(&colorAttachment);
+        renderPassCreateInfo.setSubpassCount(1);
+        renderPassCreateInfo.setPSubpasses(&subpassDescription);
+        renderPassCreateInfo.setDependencyCount(1);
+        renderPassCreateInfo.setPDependencies(&dependency);
+        
+        auto createRenderPassResult = s_device.createRenderPass(renderPassCreateInfo);
+        VK_ASSERT(createRenderPassResult);
+        s_renderPassDefault = createRenderPassResult.value;
     }
 
     void CreateSwapChain()
@@ -579,6 +889,77 @@ namespace GFX
         s_swapChainImageExtent = extent;
     }
 
+    void CreateSwapChainFramebuffers()
+    {
+        s_swapChainFrameBuffers.resize(s_swapChainImageViews.size());
+        for (size_t i = 0; i < s_swapChainImageViews.size(); i++)
+        {
+            const VkImageView* imageView = &s_swapChainImageViews[i];
+
+            VkFramebufferCreateInfo framebufferInfo = {};
+            framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+            framebufferInfo.renderPass = s_renderPassDefault;
+            framebufferInfo.attachmentCount = 1;
+            framebufferInfo.pAttachments = imageView;
+            framebufferInfo.width = s_swapChainImageExtent.width;
+            framebufferInfo.height = s_swapChainImageExtent.height;
+            framebufferInfo.layers = 1;
+
+            auto result = vkCreateFramebuffer(s_device, &framebufferInfo, nullptr, &s_swapChainFrameBuffers[i]);
+            assert(result == VK_SUCCESS);
+        }
+    }
+
+    void CreateCommandPoolDefault()
+    {
+        vk::CommandPoolCreateInfo commandPoolCreateInfo = {};
+        commandPoolCreateInfo.setQueueFamilyIndex(s_graphicsFamily);
+        commandPoolCreateInfo.setFlags(vk::CommandPoolCreateFlagBits::eResetCommandBuffer);
+        auto createCommandPoolResult = s_device.createCommandPool(commandPoolCreateInfo);
+        VK_ASSERT(createCommandPoolResult);
+
+        s_commandPoolDefault = createCommandPoolResult.value;
+    }
+
+    void CreateCommandBuffersDefault()
+    {
+        vk::CommandBufferAllocateInfo commandBufferAllocateInfo = {};
+        commandBufferAllocateInfo.setCommandBufferCount(s_swapChainImages.size());
+        commandBufferAllocateInfo.setCommandPool(s_commandPoolDefault);
+        commandBufferAllocateInfo.setLevel(vk::CommandBufferLevel::ePrimary);
+
+        auto allocateCommandBuffersResult = s_device.allocateCommandBuffers(commandBufferAllocateInfo);
+        VK_ASSERT(allocateCommandBuffersResult);
+        s_commandBuffersDefault = allocateCommandBuffersResult.value;
+    }
+
+    void CreateSyncObjects()
+    {        
+        s_imageAvailableSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
+        s_renderFinishedSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
+        s_inFlightFences.resize(MAX_FRAMES_IN_FLIGHT);
+        s_imageFences.resize(s_swapChainImages.size(), nullptr);
+
+        vk::SemaphoreCreateInfo semaphoreCreateInfo = {};
+        vk::FenceCreateInfo fenceCreateInfo = {};
+        fenceCreateInfo.setFlags(vk::FenceCreateFlagBits::eSignaled);
+
+        for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+        {
+            auto imageAvailableSemaphoreCreateResult = s_device.createSemaphore(semaphoreCreateInfo);
+            VK_ASSERT(imageAvailableSemaphoreCreateResult);
+            s_imageAvailableSemaphores[i] = imageAvailableSemaphoreCreateResult.value;
+
+            auto renderFinishedSemaphoreCreateResult = s_device.createSemaphore(semaphoreCreateInfo);
+            VK_ASSERT(renderFinishedSemaphoreCreateResult);
+            s_renderFinishedSemaphores[i] = renderFinishedSemaphoreCreateResult.value;
+
+            auto createInFlightFenceResult = s_device.createFence(fenceCreateInfo);
+            VK_ASSERT(createInFlightFenceResult);
+            s_inFlightFences[i] = createInFlightFenceResult.value;
+        }
+    }
+
     bool CheckLayerSupport(const std::vector<const char*> expectedLayers)
     {
         for (const char* layerName : expectedLayers)
@@ -621,7 +1002,7 @@ namespace GFX
     {
         for (auto format : availableFormats)
         {
-            if (format.format == vk::Format::eB8G8R8A8Srgb && format.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear)
+            if (format.format == vk::Format::eR8G8B8A8Srgb && format.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear)
             {
                 return format;
             }

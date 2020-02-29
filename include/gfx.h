@@ -62,6 +62,20 @@ namespace GFX
         bool debugMode = false;
         GLFWwindow* window = nullptr;
     };
+    
+    /*
+    U: Unsigned S: Signed F: Float I: Int
+    */
+    enum class Format
+    {
+        R32SF,
+        R8G8B8A8,
+        R8G8B8,
+        R16G16B16A16F,
+        R16G16B16F,
+        R32G32B32A32F,
+        R32G32B32F,
+    };
 
     struct Buffer
     {
@@ -102,6 +116,33 @@ namespace GFX
         PointList
     };
 
+    enum class AttachmentType
+    {
+        Color,
+        Stencil
+    };
+
+    enum class AttachmentAction
+    {
+        Clear,
+        Store
+    };
+
+    struct AttachmentDescription
+    {
+        Format format;
+    };
+
+    struct RenderPassDescription
+    {
+        std::vector<AttachmentDescription> attachments;
+    };
+
+    struct RenderPass
+    {
+        uint32_t id;
+    };
+
     struct Bindings
     {
         Buffer vertexBuffer;
@@ -110,7 +151,7 @@ namespace GFX
         std::vector<Image> fragImages;
     };
 
-    struct PipelineDescription
+    struct GraphicsPipelineDescription
     {
         std::vector<Shader> shaders;
         PrimitiveTopology primitiveTopology;
@@ -124,13 +165,27 @@ namespace GFX
 
     void Init(const InitialDescription& desc);
 
-    Pipeline CreatePipeline(const PipelineDescription& desc);
+    Pipeline CreatePipeline(const GraphicsPipelineDescription& desc);
     Shader CreateShader(const ShaderDescription& desc);
+    RenderPass CreateRenderPass(const RenderPassDescription& desc);
+    
     void DestroyShader(const Shader& shader);
+    void DestroyPipeline(const Pipeline& pipeline);
+    void DestroyRenderPass(const RenderPass& renderPass);
+
+    void BeginFrame();
+    void ApplyPipeline(Pipeline pipeline);
+    void Draw(uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance);
+    void SetViewport(float x, float y, float w, float h);
+
+    // void BeginDefaultCommandBuffer();
+    void BeginDefaultRenderPass();
+    void EndRenderPass();
+    // void EndCommandBuffer();
 
     void Submit();
 
-    void Frame();
+    void EndFrame();
 
     void Shutdown();
 };
