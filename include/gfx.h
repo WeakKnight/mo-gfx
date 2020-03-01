@@ -80,6 +80,19 @@ namespace GFX
         R32G32B32F,
     };
 
+    enum class BufferUsage
+    {
+        VertexBuffer,
+        UniformBuffer,
+        IndexBuffer,
+    };
+
+    struct BufferDescription
+    {
+        BufferUsage usage;
+        size_t size = 0;
+    };
+
     struct Buffer
     {
         uint32_t id = 0;
@@ -215,10 +228,12 @@ namespace GFX
     Pipeline CreatePipeline(const GraphicsPipelineDescription& desc);
     Shader CreateShader(const ShaderDescription& desc);
     RenderPass CreateRenderPass(const RenderPassDescription& desc);
+    Buffer CreateBuffer(const BufferDescription& desc);
     
     void DestroyShader(const Shader& shader);
     void DestroyPipeline(const Pipeline& pipeline);
     void DestroyRenderPass(const RenderPass& renderPass);
+    void DestroyBuffer(const Buffer& buffer);
 
     bool BeginFrame();
     void ApplyPipeline(Pipeline pipeline);

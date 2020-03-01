@@ -17,6 +17,7 @@ namespace GFX
     struct PipelineResource;
     struct ShaderResource;
     struct RenderPassResource;
+    struct BufferResource;
     /*
     ===================================================Static Global Variables====================================================
     */
@@ -27,12 +28,14 @@ namespace GFX
     static HandlePool<PipelineResource> s_pipelineHandlePool = HandlePool<PipelineResource>(200);
     static HandlePool<ShaderResource> s_shaderHandlePool = HandlePool<ShaderResource>(200);
     static HandlePool<RenderPassResource> s_renderPassHandlePool = HandlePool<RenderPassResource>(200);
+    static HandlePool<BufferResource> s_bufferHandlePool = HandlePool<BufferResource>(512);
 
     /*
     Device Instance
     */
     static vk::Instance s_instance = nullptr;
     static vk::PhysicalDevice s_physicalDevice = nullptr;
+    static vk::PhysicalDeviceMemoryProperties s_physicalDeviceMemoryProperties;
     static vk::Device s_device = nullptr;
 
     static VkSurfaceKHR s_surface = nullptr;
@@ -451,6 +454,65 @@ namespace GFX
         vk::PipelineLayout m_pipelineLayout = nullptr;
     };
 
+    struct BufferResource
+    {
+        BufferResource(const BufferDescription& desc)
+        {
+            vk::BufferCreateInfo bufferCreateInfo = {};
+            bufferCreateInfo.setSize(desc.size);
+            bufferCreateInfo.setUsage(MapBufferUsageForVulkan(desc.usage));
+            bufferCreateInfo.setSharingMode(vk::SharingMode::eExclusive);
+
+            auto createBufferResult = s_device.createBuffer(bufferCreateInfo);
+            VK_ASSERT(createBufferResult);
+            m_buffer = createBufferResult.value;
+
+            vk::MemoryRequirements memRequirements = s_device.getBufferMemoryRequirements(m_buffer);
+           
+            vk::MemoryAllocateInfo allocInfo = {};
+            allocInfo.setAllocationSize(memRequirements.size);
+            allocInfo.setMemoryTypeIndex(FindMemoryType(memRequirements.memoryTypeBits, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent));
+
+            auto allocResult = s_device.allocateMemory(allocInfo);
+            VK_ASSERT(allocResult);
+            m_deviceMemory = allocResult.value;
+
+            s_device.bindBufferMemory(m_buffer, m_deviceMemory, 0);
+        }
+
+        ~BufferResource()
+        {
+            s_device.destroyBuffer(m_buffer);
+            s_device.freeMemory(m_deviceMemory);
+        }
+
+        uint32_t FindMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties)
+        {
+            for (uint32_t i = 0; i < s_physicalDeviceMemoryProperties.memoryTypeCount; i++) {
+                if ((typeFilter & (1 << i)) && (s_physicalDeviceMemoryProperties.memoryTypes[i].propertyFlags & properties) == properties) {
+                    return i;
+                }
+            }
+        }
+
+        vk::BufferUsageFlags MapBufferUsageForVulkan(const BufferUsage& usage)
+        {
+            switch (usage)
+            {
+            case BufferUsage::VertexBuffer:
+                return vk::BufferUsageFlagBits::eVertexBuffer;
+            case BufferUsage::UniformBuffer:
+                return vk::BufferUsageFlagBits::eUniformBuffer;
+            case BufferUsage::IndexBuffer:
+                return vk::BufferUsageFlagBits::eIndexBuffer;
+            }
+        }
+
+        uint32_t handle = 0;
+        vk::Buffer m_buffer = nullptr;
+        vk::DeviceMemory m_deviceMemory = nullptr;
+    };
+
     /*
     =============================================Internal Interface Declaration====================================================
     */
@@ -517,6 +579,18 @@ namespace GFX
         return result;
     }
 
+    Buffer CreateBuffer(const BufferDescription& desc)
+    {
+        Buffer result = Buffer();
+
+        BufferResource* bufferResource = new BufferResource(desc);
+        result.id = s_bufferHandlePool.AllocateHandle(bufferResource);
+
+        bufferResource->handle = result.id;
+
+        return result;
+    }
+
     void DestroyShader(const Shader& shader)
     {
         s_shaderHandlePool.FreeHandle(shader.id);
@@ -530,6 +604,11 @@ namespace GFX
     void DestroyRenderPass(const RenderPass& renderPass)
     {
         s_renderPassHandlePool.FreeHandle(renderPass.id);
+    }
+
+    void DestroyBuffer(const Buffer& buffer)
+    {
+        s_bufferHandlePool.FreeHandle(buffer.id);
     }
 
     /*
@@ -620,6 +699,7 @@ namespace GFX
         auto enumeratePhysicalDevicesResult = s_instance.enumeratePhysicalDevices();
         VK_ASSERT(enumeratePhysicalDevicesResult);
         s_physicalDevice = ChooseDevice(enumeratePhysicalDevicesResult.value);
+        s_physicalDeviceMemoryProperties = s_physicalDevice.getMemoryProperties();
 
         // Create Surface
         glfwCreateWindowSurface(s_instance, desc.window, nullptr, &s_surface);
