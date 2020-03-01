@@ -7,6 +7,9 @@
 const int WIDTH = 800;
 const int HEIGHT = 600;
 
+static int s_width = WIDTH;
+static int s_height = HEIGHT;
+
 static GFX::Shader vertShader;
 static GFX::Shader fragShader;
 static GFX::Pipeline pipeline;
@@ -20,14 +23,22 @@ void App::Run()
 	CleanUp();
 }
 
+static void framebufferResizeCallback(GLFWwindow* window, int width, int height) 
+{
+	s_width = width;
+	s_height = height;
+}
+
 void App::Init()
 {
 	glfwInit();
 
 	glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-	glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
+	glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
 	
 	m_window = glfwCreateWindow(WIDTH, HEIGHT, "Vulkan", nullptr, nullptr);
+
+	glfwSetFramebufferSizeCallback(m_window, framebufferResizeCallback);
 
 	GFX::InitialDescription initDesc = {};
 	initDesc.debugMode = true;
@@ -61,17 +72,21 @@ void App::MainLoop()
 	{
 		glfwPollEvents();
 
-		GFX::BeginFrame();
-		
-		GFX::BeginDefaultRenderPass();
+		if (GFX::BeginFrame())
+		{
+			GFX::BeginDefaultRenderPass();
 
-		GFX::SetViewport(0, 0, WIDTH, HEIGHT);
-		GFX::ApplyPipeline(pipeline);
-		GFX::Draw(3, 1, 0, 0);
-		
-		GFX::EndRenderPass();
-		
-		GFX::EndFrame();
+			GFX::ApplyPipeline(pipeline);
+			
+			GFX::SetViewport(0, 0, s_width, s_height);
+			GFX::SetScissor(0, 0, s_width, s_height);
+
+			GFX::Draw(3, 1, 0, 0);
+
+			GFX::EndRenderPass();
+
+			GFX::EndFrame();
+		}
 	}
 }
 

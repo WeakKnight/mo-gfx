@@ -1,4 +1,5 @@
 #include "gfx.h"
+#define VULKAN_HPP_ASSERT
 #define VULKAN_HPP_NO_EXCEPTIONS
 #include <vulkan/vulkan.hpp>
 #include <GLFW/glfw3.h>
@@ -105,7 +106,6 @@ namespace GFX
     std::vector<vk::Semaphore> s_imageAvailableSemaphores;
     std::vector<vk::Semaphore> s_renderFinishedSemaphores;
     std::vector<vk::Fence> s_inFlightFences;
-    std::vector<vk::Fence> s_imageFences;
 
     /*
     Extension And Layer Info
@@ -330,6 +330,7 @@ namespace GFX
             std::vector<vk::DynamicState> dynamicStates =
             {
                 vk::DynamicState::eViewport,
+                vk::DynamicState::eScissor,
             };
 
             vk::PipelineDynamicStateCreateInfo dynamicStateCreateInfo = {};
@@ -363,6 +364,8 @@ namespace GFX
 
         ~PipelineResource()
         {
+            s_device.waitIdle();
+
             s_device.destroyPipelineLayout(m_pipelineLayout);
             s_device.destroyPipeline(m_pipeline);
         }
@@ -407,6 +410,7 @@ namespace GFX
     vk::Extent2D ChooseSwapExtent(const vk::SurfaceCapabilitiesKHR& capabilities);
 
     void CreateSwapChain();
+    void RecreateSwapChain();
     void CreateImageViews();
     void CreateDefaultRenderPass();
     void CreateSwapChainFramebuffers();
@@ -495,6 +499,15 @@ namespace GFX
         newViewport.setHeight(h);
 
         s_commandBuffersDefault[s_currentImageIndex].setViewport(0, 1, &newViewport);
+        
+    }
+
+    void SetScissor(float x, float y, float w, float h)
+    {
+        vk::Rect2D scissor = {};
+        scissor.setOffset({ x, y });
+        scissor.setExtent({ w, h });
+        s_commandBuffersDefault[s_currentImageIndex].setScissor(0, scissor);
     }
 
     /*
@@ -627,28 +640,31 @@ namespace GFX
 
     }
 
-    void BeginFrame()
+    bool BeginFrame()
     {
         s_device.waitForFences(1, &s_inFlightFences[s_currentFrame], false, UINT64_MAX);
         s_device.resetFences(1, &s_inFlightFences[s_currentFrame]);
 
         auto acquireNextImageResult = s_device.acquireNextImageKHR(s_swapChain, UINT64_MAX, s_imageAvailableSemaphores[s_currentFrame], nullptr);
-        VK_ASSERT(acquireNextImageResult);
-
-        s_currentImageIndex = acquireNextImageResult.value;
-
-        if ((VkFence)(s_imageFences[s_currentImageIndex]) != VK_NULL_HANDLE)
+        
+        if (acquireNextImageResult.result == vk::Result::eErrorOutOfDateKHR || acquireNextImageResult.result == vk::Result::eSuboptimalKHR)
         {
-            s_device.waitForFences(1, &s_imageFences[s_currentImageIndex], true, UINT64_MAX);
+            RecreateSwapChain();
+            return false;
+        }
+        else
+        {
+            VK_ASSERT(acquireNextImageResult);
         }
 
-        s_imageFences[s_currentImageIndex] = s_inFlightFences[s_currentFrame];
+        s_currentImageIndex = acquireNextImageResult.value;
 
         vk::CommandBufferBeginInfo commandBufferBeginInfo = {};
         commandBufferBeginInfo.setFlags(vk::CommandBufferUsageFlagBits::eOneTimeSubmit);
 
         auto commandBufferBeginResult = s_commandBuffersDefault[s_currentImageIndex].begin(commandBufferBeginInfo);
         assert(commandBufferBeginResult == vk::Result::eSuccess);
+        return true;
     }
 
     void BeginDefaultRenderPass()
@@ -708,7 +724,15 @@ namespace GFX
         presentInfo.setPImageIndices(&s_currentImageIndex);
         presentInfo.setSwapchainCount(1);
 
-        s_presentQueueDefault.presentKHR(presentInfo);
+        auto presentResult = s_presentQueueDefault.presentKHR(presentInfo);
+        if (presentResult == vk::Result::eErrorOutOfDateKHR || presentResult == vk::Result::eSuboptimalKHR)
+        {
+            RecreateSwapChain();
+        }
+        else
+        {
+            assert(presentResult == vk::Result::eSuccess);
+        }
 
         s_currentFrame = (s_currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
     }
@@ -718,11 +742,6 @@ namespace GFX
         s_device.waitIdle();
 
         for (auto fence : s_inFlightFences)
-        {
-            s_device.destroyFence(fence);
-        }
-
-        for (auto fence : s_imageFences)
         {
             s_device.destroyFence(fence);
         }
@@ -889,6 +908,31 @@ namespace GFX
         s_swapChainImageExtent = extent;
     }
 
+    void RecreateSwapChain()
+    {
+        s_device.waitIdle();
+
+        for (auto framebuffer : s_swapChainFrameBuffers)
+        {
+            vkDestroyFramebuffer(s_device, framebuffer, nullptr);
+        }
+
+        for (auto imageView : s_swapChainImageViews)
+        {
+            vkDestroyImageView(s_device, imageView, nullptr);
+        }
+
+        vkDestroySwapchainKHR(s_device, s_swapChain, nullptr);
+
+        s_swapChainFrameBuffers.clear();
+        s_swapChainImageViews.clear();
+        s_swapChainImages.clear();
+
+        CreateSwapChain();
+        CreateImageViews();
+        CreateSwapChainFramebuffers();
+    }
+
     void CreateSwapChainFramebuffers()
     {
         s_swapChainFrameBuffers.resize(s_swapChainImageViews.size());
@@ -938,7 +982,6 @@ namespace GFX
         s_imageAvailableSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
         s_renderFinishedSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
         s_inFlightFences.resize(MAX_FRAMES_IN_FLIGHT);
-        s_imageFences.resize(s_swapChainImages.size(), nullptr);
 
         vk::SemaphoreCreateInfo semaphoreCreateInfo = {};
         vk::FenceCreateInfo fenceCreateInfo = {};

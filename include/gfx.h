@@ -1,5 +1,8 @@
 #pragma once
-#include "common.h"
+
+#include <string>
+#include <vector>
+#include <memory>
 #include <list>
 
 struct GLFWwindow;
@@ -173,11 +176,11 @@ namespace GFX
     void DestroyPipeline(const Pipeline& pipeline);
     void DestroyRenderPass(const RenderPass& renderPass);
 
-    void BeginFrame();
+    bool BeginFrame();
     void ApplyPipeline(Pipeline pipeline);
     void Draw(uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance);
     void SetViewport(float x, float y, float w, float h);
-
+    void SetScissor(float x, float y, float w, float h);
     // void BeginDefaultCommandBuffer();
     void BeginDefaultRenderPass();
     void EndRenderPass();
