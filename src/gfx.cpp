@@ -458,6 +458,8 @@ namespace GFX
     {
         BufferResource(const BufferDescription& desc)
         {
+            m_size = desc.size;
+
             vk::BufferCreateInfo bufferCreateInfo = {};
             bufferCreateInfo.setSize(desc.size);
             bufferCreateInfo.setUsage(MapBufferUsageForVulkan(desc.usage));
@@ -508,7 +510,32 @@ namespace GFX
             }
         }
 
+        void Map(size_t offset, size_t size)
+        {
+            auto mapMemoryResult = s_device.mapMemory(m_deviceMemory, offset, size);
+            VK_ASSERT(mapMemoryResult);
+            m_mappedPtr = mapMemoryResult.value;
+        }
+
+        void Unmap()
+        {
+            s_device.unmapMemory(m_deviceMemory);
+        }
+
+        void* GetMappedPointer()
+        {
+            return m_mappedPtr;
+        }
+
+        size_t GetSize()
+        {
+            return m_size;
+        }
+
         uint32_t handle = 0;
+
+        void* m_mappedPtr = nullptr;
+        size_t m_size = 0;
         vk::Buffer m_buffer = nullptr;
         vk::DeviceMemory m_deviceMemory = nullptr;
     };
