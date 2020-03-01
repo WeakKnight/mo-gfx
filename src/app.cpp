@@ -3,6 +3,7 @@
 #include <spdlog/spdlog.h>
 #include "gfx.h"
 #include "string_utils.h"
+#include <glm/glm.hpp>
 
 const int WIDTH = 800;
 const int HEIGHT = 600;
@@ -13,6 +14,12 @@ static int s_height = HEIGHT;
 static GFX::Shader vertShader;
 static GFX::Shader fragShader;
 static GFX::Pipeline pipeline;
+
+struct Vertex
+{
+	glm::vec2 pos;
+	glm::vec3 color;
+};
 
 void App::Run()
 {
@@ -59,10 +66,19 @@ void App::Init()
 	vertShader = GFX::CreateShader(vertDesc);
 	fragShader = GFX::CreateShader(fragDesc);
 
+	GFX::Bindings bindings = {};
+	bindings.AddAttribute(0, offsetof(Vertex, pos), GFX::ValueType::Float32x2);
+	bindings.AddAttribute(1, offsetof(Vertex, color), GFX::ValueType::Float32x3);
+	bindings.SetStrideSize(sizeof(Vertex));
+	bindings.SetBindingType(GFX::BindingType::Vertex);
+	bindings.SetBindingPosition(0);
+
 	GFX::GraphicsPipelineDescription pipelineDesc = {};
 	pipelineDesc.primitiveTopology = GFX::PrimitiveTopology::TriangleList;
 	pipelineDesc.shaders.push_back(vertShader);
 	pipelineDesc.shaders.push_back(fragShader);
+	pipelineDesc.bindings = bindings;
+
 	pipeline = GFX::CreatePipeline(pipelineDesc);
 }
 

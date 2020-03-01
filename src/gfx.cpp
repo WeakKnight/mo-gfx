@@ -277,9 +277,15 @@ namespace GFX
                 shaderStageCreateInfos.push_back(shaderResource->GetShaderStageCreateInfo());
             }
 
+            auto bindingDesc = CreateBindingDescription(desc.bindings);
+            auto attributeDescs = CreateVertexInputAttributeDescriptions(desc.bindings);
+
             vk::PipelineVertexInputStateCreateInfo vertexInputStateCreateInfo = {};
-            vertexInputStateCreateInfo.setVertexBindingDescriptionCount(0);
-            vertexInputStateCreateInfo.setVertexAttributeDescriptionCount(0);
+            vertexInputStateCreateInfo.setVertexBindingDescriptionCount(1);
+            vertexInputStateCreateInfo.setPVertexBindingDescriptions(&bindingDesc);
+
+            vertexInputStateCreateInfo.setVertexAttributeDescriptionCount(attributeDescs.size());
+            vertexInputStateCreateInfo.setPVertexAttributeDescriptions(attributeDescs.data());
 
             vk::PipelineInputAssemblyStateCreateInfo inputAssemblyStateCreateInfo = {};
             inputAssemblyStateCreateInfo.setTopology(MapPrimitiveTopologyForVulkan(desc.primitiveTopology));
@@ -368,6 +374,56 @@ namespace GFX
 
             s_device.destroyPipelineLayout(m_pipelineLayout);
             s_device.destroyPipeline(m_pipeline);
+        }
+
+        vk::VertexInputBindingDescription CreateBindingDescription(const Bindings& bindings)
+        {
+            vk::VertexInputBindingDescription vertexInputBindingDescription = {};
+            vertexInputBindingDescription.setBinding(0);
+            vertexInputBindingDescription.setInputRate(MapBindingTypeForVulkan(bindings.m_bindingType));
+            vertexInputBindingDescription.setStride(bindings.m_strideSize);
+
+            return vertexInputBindingDescription;
+        }
+
+        std::vector<vk::VertexInputAttributeDescription> CreateVertexInputAttributeDescriptions(const Bindings& bindings)
+        {
+            std::vector<vk::VertexInputAttributeDescription> results = {};
+            for (size_t i = 0; i < bindings.m_layout.size(); i++)
+            {
+                auto attributeInfo = bindings.m_layout[i];
+                vk::VertexInputAttributeDescription attributeDesc = {};
+                attributeDesc.setBinding(bindings.m_bindingPosition);
+                attributeDesc.setFormat(MapTypeFormatForVulkan(attributeInfo.type));
+                attributeDesc.setLocation(attributeInfo.location);
+                attributeDesc.setOffset(attributeInfo.offset);
+
+                results.push_back(attributeDesc);
+            }
+
+            return results;
+        }
+
+        vk::Format MapTypeFormatForVulkan(ValueType valueType)
+        {
+            switch (valueType)
+            {
+            case ValueType::Float32x2:
+                return vk::Format::eR32G32Sfloat;
+            case ValueType::Float32x3:
+                return vk::Format::eR32G32B32Sfloat;
+            }
+        }
+
+        vk::VertexInputRate MapBindingTypeForVulkan(BindingType bindingType)
+        {
+            switch (bindingType)
+            {
+            case BindingType::Vertex:
+                return vk::VertexInputRate::eVertex;
+            case BindingType::Instance:
+                return vk::VertexInputRate::eInstance;
+            }
         }
 
         vk::PrimitiveTopology MapPrimitiveTopologyForVulkan(const PrimitiveTopology& primitiveTopology)
@@ -505,8 +561,9 @@ namespace GFX
     void SetScissor(float x, float y, float w, float h)
     {
         vk::Rect2D scissor = {};
-        scissor.setOffset({ x, y });
-        scissor.setExtent({ w, h });
+        scissor.setOffset({ static_cast<int32_t>(x), static_cast<int32_t>(y) });
+        scissor.setExtent({ static_cast<uint32_t>(w), static_cast<uint32_t>(h) });
+        
         s_commandBuffersDefault[s_currentImageIndex].setScissor(0, scissor);
     }
 

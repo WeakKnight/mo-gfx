@@ -146,12 +146,56 @@ namespace GFX
         uint32_t id;
     };
 
+    enum class ValueType
+    {
+        Float32x2,
+        Float32x3,
+    };
+
+    enum class BindingType
+    {
+        Vertex,
+        Instance
+    };
+
     struct Bindings
     {
-        Buffer vertexBuffer;
-        Buffer indexBuffer;
-        std::vector<Image> vertexImages;
-        std::vector<Image> fragImages;
+        struct AttributeDescription
+        {
+            uint32_t location = 0;
+            ValueType type;
+            size_t offset = 0;
+        };
+
+        void AddAttribute(uint32_t location, size_t offset, ValueType type)
+        {
+            AttributeDescription desc = {};
+            desc.offset = offset;
+            desc.type = type;
+            desc.location = location;
+
+            m_layout.push_back(desc);
+        }
+
+        void SetStrideSize(size_t size)
+        {
+            m_strideSize = size;
+        }
+
+        void SetBindingType(BindingType bindingType)
+        {
+            m_bindingType = bindingType;
+        }
+
+        void SetBindingPosition(uint32_t pos)
+        {
+            m_bindingPosition = pos;
+        }
+
+        BindingType m_bindingType = BindingType::Vertex;
+        size_t m_strideSize = 0;
+        std::vector<AttributeDescription> m_layout;
+        uint32_t m_bindingPosition = 0;
     };
 
     struct GraphicsPipelineDescription
