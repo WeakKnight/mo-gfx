@@ -150,6 +150,32 @@ namespace GFX
     }
 
     /*
+    =============================================Internal Interface Declaration====================================================
+    */
+
+    bool CheckLayerSupport(const std::vector<const char*> expectedLayers);
+
+    vk::PhysicalDevice ChooseDevice(const std::vector<vk::PhysicalDevice>& physicalDevices);
+
+    vk::SurfaceFormatKHR ChooseSurfaceFormat(const std::vector<vk::SurfaceFormatKHR>& availableFormats);
+
+    vk::PresentModeKHR ChoosePresentMode(const std::vector<vk::PresentModeKHR>& availablePresentModes);
+
+    vk::Extent2D ChooseSwapExtent(const vk::SurfaceCapabilitiesKHR& capabilities);
+
+    void CreateSwapChain();
+    void RecreateSwapChain();
+    void CreateImageViews();
+    void CreateDefaultRenderPass();
+    void CreateSwapChainFramebuffers();
+    void CreateCommandPoolDefault();
+    void CreateCommandBuffersDefault();
+    void CreateSyncObjects();
+
+    vk::CommandBuffer BeginOneTimeCommandBuffer();
+    void EndOneTimeCommandBuffer(vk::CommandBuffer commandBuffer);
+
+    /*
     ===========================================Internal Struct Definition===================================================
     */
 
@@ -572,19 +598,7 @@ namespace GFX
                 // Unmap First
                 s_device.unmapMemory(m_stagingDeviceMemory);
                 // Copy To device memory
-                vk::CommandBufferAllocateInfo commandBufferAllocateInfo = {};
-                commandBufferAllocateInfo.setLevel(vk::CommandBufferLevel::ePrimary);
-                commandBufferAllocateInfo.setCommandPool(s_commandPoolDefault);
-                commandBufferAllocateInfo.setCommandBufferCount(1);
-
-                auto allocateCommandBufferResult = s_device.allocateCommandBuffers(commandBufferAllocateInfo);
-                VK_ASSERT(allocateCommandBufferResult);
-
-                vk::CommandBuffer oneTimeCommandBuffer = allocateCommandBufferResult.value[0];
-                
-                vk::CommandBufferBeginInfo beginInfo = {};
-                beginInfo.setFlags(vk::CommandBufferUsageFlagBits::eOneTimeSubmit);
-                oneTimeCommandBuffer.begin(beginInfo);
+                auto oneTimeCommandBuffer = BeginOneTimeCommandBuffer();
 
                 vk::BufferCopy bufferCopy = {};
                 bufferCopy.setSize(m_mappedSize);
@@ -593,16 +607,7 @@ namespace GFX
 
                 oneTimeCommandBuffer.copyBuffer(m_stagingBuffer, m_buffer, bufferCopy);
 
-                oneTimeCommandBuffer.end();
-
-                vk::SubmitInfo submitInfo = {};
-                submitInfo.setCommandBufferCount(1);
-                submitInfo.setPCommandBuffers(&oneTimeCommandBuffer);
-
-                s_graphicsQueueDefault.submit(submitInfo, nullptr);
-                s_graphicsQueueDefault.waitIdle();
-
-                s_device.freeCommandBuffers(s_commandPoolDefault, oneTimeCommandBuffer);
+                EndOneTimeCommandBuffer(oneTimeCommandBuffer);
 
                 // Clear Stage Buffer
                 s_device.destroyBuffer(m_stagingBuffer);
@@ -634,28 +639,6 @@ namespace GFX
         BufferStorageMode m_storageMode = BufferStorageMode::Dynamic;
     };
 
-    /*
-    =============================================Internal Interface Declaration====================================================
-    */
-
-    bool CheckLayerSupport(const std::vector<const char*> expectedLayers);
-
-    vk::PhysicalDevice ChooseDevice(const std::vector<vk::PhysicalDevice>& physicalDevices);
-
-    vk::SurfaceFormatKHR ChooseSurfaceFormat(const std::vector<vk::SurfaceFormatKHR>& availableFormats);
-
-    vk::PresentModeKHR ChoosePresentMode(const std::vector<vk::PresentModeKHR>& availablePresentModes);
-
-    vk::Extent2D ChooseSwapExtent(const vk::SurfaceCapabilitiesKHR& capabilities);
-
-    void CreateSwapChain();
-    void RecreateSwapChain();
-    void CreateImageViews();
-    void CreateDefaultRenderPass();
-    void CreateSwapChainFramebuffers();
-    void CreateCommandPoolDefault();
-    void CreateCommandBuffersDefault();
-    void CreateSyncObjects();
     /*
     =================================================Implementation===========================================================
     */
@@ -1282,6 +1265,39 @@ namespace GFX
             VK_ASSERT(createInFlightFenceResult);
             s_inFlightFences[i] = createInFlightFenceResult.value;
         }
+    }
+
+    vk::CommandBuffer BeginOneTimeCommandBuffer()
+    {
+        vk::CommandBufferAllocateInfo commandBufferAllocateInfo = {};
+        commandBufferAllocateInfo.setLevel(vk::CommandBufferLevel::ePrimary);
+        commandBufferAllocateInfo.setCommandPool(s_commandPoolDefault);
+        commandBufferAllocateInfo.setCommandBufferCount(1);
+
+        auto allocateCommandBufferResult = s_device.allocateCommandBuffers(commandBufferAllocateInfo);
+        VK_ASSERT(allocateCommandBufferResult);
+
+        vk::CommandBuffer oneTimeCommandBuffer = allocateCommandBufferResult.value[0];
+
+        vk::CommandBufferBeginInfo beginInfo = {};
+        beginInfo.setFlags(vk::CommandBufferUsageFlagBits::eOneTimeSubmit);
+        oneTimeCommandBuffer.begin(beginInfo);
+
+        return oneTimeCommandBuffer;
+    }
+
+    void EndOneTimeCommandBuffer(vk::CommandBuffer commandBuffer)
+    {
+        commandBuffer.end();
+
+        vk::SubmitInfo submitInfo = {};
+        submitInfo.setCommandBufferCount(1);
+        submitInfo.setPCommandBuffers(&commandBuffer);
+
+        s_graphicsQueueDefault.submit(submitInfo, nullptr);
+        s_graphicsQueueDefault.waitIdle();
+
+        s_device.freeCommandBuffers(s_commandPoolDefault, commandBuffer);
     }
 
     bool CheckLayerSupport(const std::vector<const char*> expectedLayers)
