@@ -175,6 +175,8 @@ namespace GFX
     vk::CommandBuffer BeginOneTimeCommandBuffer();
     void EndOneTimeCommandBuffer(vk::CommandBuffer commandBuffer);
 
+    vk::Format MapTypeFormatForVulkan(ValueType valueType);
+    vk::IndexType MapIndexTypeFormatForVulkan(IndexType indexType);
     /*
     ===========================================Internal Struct Definition===================================================
     */
@@ -431,17 +433,6 @@ namespace GFX
             }
 
             return results;
-        }
-
-        vk::Format MapTypeFormatForVulkan(ValueType valueType)
-        {
-            switch (valueType)
-            {
-            case ValueType::Float32x2:
-                return vk::Format::eR32G32Sfloat;
-            case ValueType::Float32x3:
-                return vk::Format::eR32G32B32Sfloat;
-            }
         }
 
         vk::VertexInputRate MapBindingTypeForVulkan(BindingType bindingType)
@@ -740,6 +731,12 @@ namespace GFX
         s_commandBuffersDefault[s_currentImageIndex].bindPipeline(vk::PipelineBindPoint::eGraphics, pipelineResource->m_pipeline);
     }
 
+    void BindIndexBuffer(Buffer buffer, size_t offset, IndexType indexType)
+    {
+        BufferResource* bufferResource = s_bufferHandlePool.FetchResource(buffer.id);
+        s_commandBuffersDefault[s_currentImageIndex].bindIndexBuffer(bufferResource->m_buffer, offset, MapIndexTypeFormatForVulkan(indexType));
+    }
+
     void BindVertexBuffer(Buffer buffer, size_t offset, uint32_t binding)
     {
         BufferResource* bufferResource = s_bufferHandlePool.FetchResource(buffer.id);
@@ -750,6 +747,11 @@ namespace GFX
     void Draw(uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance)
     {
         s_commandBuffersDefault[s_currentImageIndex].draw(vertexCount, instanceCount, firstVertex, firstInstance);
+    }
+
+    void DrawIndexed(uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, uint32_t vertexOffset, uint32_t firstInstance)
+    {
+        s_commandBuffersDefault[s_currentImageIndex].drawIndexed(indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
     }
 
     void SetViewport(float x, float y, float w, float h)
@@ -1298,6 +1300,30 @@ namespace GFX
         s_graphicsQueueDefault.waitIdle();
 
         s_device.freeCommandBuffers(s_commandPoolDefault, commandBuffer);
+    }
+
+    vk::Format MapTypeFormatForVulkan(ValueType valueType)
+    {
+        switch (valueType)
+        {
+        case ValueType::Float32x2:
+            return vk::Format::eR32G32Sfloat;
+        case ValueType::Float32x3:
+            return vk::Format::eR32G32B32Sfloat;
+        case ValueType::UInt16:
+            return vk::Format::eR16Uint;
+        }
+    }
+
+    vk::IndexType MapIndexTypeFormatForVulkan(IndexType indexType)
+    {
+        switch (indexType)
+        {
+        case IndexType::UInt16:
+            return vk::IndexType::eUint16;
+        case IndexType::UInt32:
+            return vk::IndexType::eUint32;
+        }
     }
 
     bool CheckLayerSupport(const std::vector<const char*> expectedLayers)

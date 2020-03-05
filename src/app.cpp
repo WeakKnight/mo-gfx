@@ -15,6 +15,7 @@ static GFX::Shader vertShader;
 static GFX::Shader fragShader;
 static GFX::Pipeline pipeline;
 static GFX::Buffer vertexBuffer;
+static GFX::Buffer indexBuffer;
 
 struct Vertex
 {
@@ -23,9 +24,14 @@ struct Vertex
 };
 
 const std::vector<Vertex> vertices = {
-	{{0.0f, -0.5f}, {1.0f, 0.0f, 0.0f}},
-	{{0.5f, 0.5f}, {0.0f, 1.0f, 0.0f}},
-	{{-0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}}
+	{{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
+	{{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}},
+	{{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}},
+	{{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}}
+};
+
+const std::vector<uint16_t> indices = {
+	0, 1, 2, 2, 3, 0
 };
 
 void App::Run()
@@ -66,9 +72,19 @@ void App::Init()
 	vertexBufferDescription.usage = GFX::BufferUsage::VertexBuffer;
 
 	vertexBuffer = GFX::CreateBuffer(vertexBufferDescription);
-	void* data = GFX::MapBuffer(vertexBuffer, 0, vertexBufferDescription.size);
-	memcpy(data, vertices.data(), vertexBufferDescription.size);
+	void* vertexData = GFX::MapBuffer(vertexBuffer, 0, vertexBufferDescription.size);
+	memcpy(vertexData, vertices.data(), vertexBufferDescription.size);
 	GFX::UnmapBuffer(vertexBuffer);
+
+	GFX::BufferDescription indexBufferDescription = {};
+	indexBufferDescription.size = sizeof(uint16_t) * indices.size();
+	indexBufferDescription.storageMode = GFX::BufferStorageMode::Static;
+	indexBufferDescription.usage = GFX::BufferUsage::IndexBuffer;
+
+	indexBuffer = GFX::CreateBuffer(indexBufferDescription);
+	void* indexData = GFX::MapBuffer(indexBuffer, 0, indexBufferDescription.size);
+	memcpy(indexData, indices.data(), indexBufferDescription.size);
+	GFX::UnmapBuffer(indexBuffer);
 
 	GFX::ShaderDescription vertDesc = {};
 	vertDesc.name = "default";
@@ -110,13 +126,14 @@ void App::MainLoop()
 			GFX::BeginDefaultRenderPass();
 
 			GFX::ApplyPipeline(pipeline);
-
+			
+			GFX::BindIndexBuffer(indexBuffer, 0, GFX::IndexType::UInt16);
 			GFX::BindVertexBuffer(vertexBuffer, 0);
 			
 			GFX::SetViewport(0, 0, s_width, s_height);
 			GFX::SetScissor(0, 0, s_width, s_height);
-
-			GFX::Draw(3, 1, 0, 0);
+			
+			GFX::DrawIndexed(indices.size(), 1, 0);
 
 			GFX::EndRenderPass();
 
@@ -128,6 +145,7 @@ void App::MainLoop()
 void App::CleanUp()
 {
 	GFX::DestroyBuffer(vertexBuffer);
+	GFX::DestroyBuffer(indexBuffer);
 
 	GFX::DestroyPipeline(pipeline);
 

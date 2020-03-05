@@ -172,10 +172,17 @@ namespace GFX
         uint32_t id;
     };
 
+    enum class IndexType
+    {
+        UInt16,
+        UInt32,
+    };
+
     enum class ValueType
     {
         Float32x2,
         Float32x3,
+        UInt16
     };
 
     enum class BindingType
@@ -267,8 +274,10 @@ namespace GFX
     */
     bool BeginFrame();
     void ApplyPipeline(Pipeline pipeline);
+    void BindIndexBuffer(Buffer buffer, size_t offset, IndexType indexType);
     void BindVertexBuffer(Buffer buffer, size_t offset, uint32_t binding = 0);
     void Draw(uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance);
+    void DrawIndexed(uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, uint32_t vertexOffset = 0, uint32_t firstInstance = 0);
     void SetViewport(float x, float y, float w, float h);
     void SetScissor(float x, float y, float w, float h);
     // void BeginDefaultCommandBuffer();
