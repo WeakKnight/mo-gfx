@@ -407,7 +407,7 @@ namespace GFX
             s_device.destroyPipeline(m_pipeline);
         }
 
-        vk::VertexInputBindingDescription CreateBindingDescription(const Bindings& bindings)
+        vk::VertexInputBindingDescription CreateBindingDescription(const VertexBindings& bindings)
         {
             vk::VertexInputBindingDescription vertexInputBindingDescription = {};
             vertexInputBindingDescription.setBinding(0);
@@ -417,7 +417,7 @@ namespace GFX
             return vertexInputBindingDescription;
         }
 
-        std::vector<vk::VertexInputAttributeDescription> CreateVertexInputAttributeDescriptions(const Bindings& bindings)
+        std::vector<vk::VertexInputAttributeDescription> CreateVertexInputAttributeDescriptions(const VertexBindings& bindings)
         {
             std::vector<vk::VertexInputAttributeDescription> results = {};
             for (size_t i = 0; i < bindings.m_layout.size(); i++)

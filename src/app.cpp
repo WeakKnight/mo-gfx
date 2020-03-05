@@ -34,6 +34,13 @@ const std::vector<uint16_t> indices = {
 	0, 1, 2, 2, 3, 0
 };
 
+struct UniformBufferObject 
+{
+	glm::mat4 model;
+	glm::mat4 view;
+	glm::mat4 proj;
+};
+
 void App::Run()
 {
 	Init();
@@ -99,7 +106,7 @@ void App::Init()
 	vertShader = GFX::CreateShader(vertDesc);
 	fragShader = GFX::CreateShader(fragDesc);
 
-	GFX::Bindings bindings = {};
+	GFX::VertexBindings bindings = {};
 	bindings.AddAttribute(0, offsetof(Vertex, pos), GFX::ValueType::Float32x2);
 	bindings.AddAttribute(1, offsetof(Vertex, color), GFX::ValueType::Float32x3);
 	bindings.SetStrideSize(sizeof(Vertex));

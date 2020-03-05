@@ -121,6 +121,7 @@ namespace GFX
         Vertex,
         Fragment,
         Compute,
+        All,
         None
     };
 
@@ -191,7 +192,7 @@ namespace GFX
         Instance
     };
 
-    struct Bindings
+    struct VertexBindings
     {
         struct AttributeDescription
         {
@@ -231,11 +232,22 @@ namespace GFX
         uint32_t m_bindingPosition = 0;
     };
 
+    struct UniformBindings
+    {
+        struct UniformDescription
+        {
+            size_t size = 0;
+            size_t offset = 0;
+        };
+
+        std::vector<UniformDescription> m_layout;
+    };
+
     struct GraphicsPipelineDescription
     {
         std::vector<Shader> shaders;
         PrimitiveTopology primitiveTopology;
-        Bindings bindings;
+        VertexBindings bindings;
     };
 
     struct Pipeline
