@@ -87,9 +87,22 @@ namespace GFX
         IndexBuffer,
     };
 
+    enum class BufferStorageMode
+    {
+        /*
+        Host Coherent
+        */
+        Dynamic,
+        /*
+        Device Local,
+        */
+        Static,
+    };
+
     struct BufferDescription
     {
         BufferUsage usage;
+        BufferStorageMode storageMode;
         size_t size = 0;
     };
 
@@ -235,8 +248,26 @@ namespace GFX
     void DestroyRenderPass(const RenderPass& renderPass);
     void DestroyBuffer(const Buffer& buffer);
 
+    /*
+    Buffer Operation
+    */
+
+    /*
+    Return Mapped Buffer Pointer
+    */
+    void* MapBuffer(const Buffer& buffer, size_t offset, size_t size);
+
+    /*
+    Unmap A Buffer
+    */
+    void UnmapBuffer(const Buffer& buffer);
+
+    /*
+    Rendering Operation
+    */
     bool BeginFrame();
     void ApplyPipeline(Pipeline pipeline);
+    void BindVertexBuffer(Buffer buffer, size_t offset, uint32_t binding = 0);
     void Draw(uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance);
     void SetViewport(float x, float y, float w, float h);
     void SetScissor(float x, float y, float w, float h);

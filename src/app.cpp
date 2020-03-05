@@ -14,11 +14,18 @@ static int s_height = HEIGHT;
 static GFX::Shader vertShader;
 static GFX::Shader fragShader;
 static GFX::Pipeline pipeline;
+static GFX::Buffer vertexBuffer;
 
 struct Vertex
 {
 	glm::vec2 pos;
 	glm::vec3 color;
+};
+
+const std::vector<Vertex> vertices = {
+	{{0.0f, -0.5f}, {1.0f, 0.0f, 0.0f}},
+	{{0.5f, 0.5f}, {0.0f, 1.0f, 0.0f}},
+	{{-0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}}
 };
 
 void App::Run()
@@ -52,6 +59,16 @@ void App::Init()
 	initDesc.window = m_window;
 
 	GFX::Init(initDesc);
+
+	GFX::BufferDescription vertexBufferDescription = {};
+	vertexBufferDescription.size = sizeof(Vertex) * vertices.size();
+	vertexBufferDescription.storageMode = GFX::BufferStorageMode::Static;
+	vertexBufferDescription.usage = GFX::BufferUsage::VertexBuffer;
+
+	vertexBuffer = GFX::CreateBuffer(vertexBufferDescription);
+	void* data = GFX::MapBuffer(vertexBuffer, 0, vertexBufferDescription.size);
+	memcpy(data, vertices.data(), vertexBufferDescription.size);
+	GFX::UnmapBuffer(vertexBuffer);
 
 	GFX::ShaderDescription vertDesc = {};
 	vertDesc.name = "default";
@@ -93,6 +110,8 @@ void App::MainLoop()
 			GFX::BeginDefaultRenderPass();
 
 			GFX::ApplyPipeline(pipeline);
+
+			GFX::BindVertexBuffer(vertexBuffer, 0);
 			
 			GFX::SetViewport(0, 0, s_width, s_height);
 			GFX::SetScissor(0, 0, s_width, s_height);
@@ -108,6 +127,8 @@ void App::MainLoop()
 
 void App::CleanUp()
 {
+	GFX::DestroyBuffer(vertexBuffer);
+
 	GFX::DestroyPipeline(pipeline);
 
 	GFX::DestroyShader(vertShader);

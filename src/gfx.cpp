@@ -459,33 +459,58 @@ namespace GFX
         BufferResource(const BufferDescription& desc)
         {
             m_size = desc.size;
+            m_storageMode = desc.storageMode;
 
-            vk::BufferCreateInfo bufferCreateInfo = {};
-            bufferCreateInfo.setSize(desc.size);
-            bufferCreateInfo.setUsage(MapBufferUsageForVulkan(desc.usage));
-            bufferCreateInfo.setSharingMode(vk::SharingMode::eExclusive);
-
-            auto createBufferResult = s_device.createBuffer(bufferCreateInfo);
-            VK_ASSERT(createBufferResult);
-            m_buffer = createBufferResult.value;
-
-            vk::MemoryRequirements memRequirements = s_device.getBufferMemoryRequirements(m_buffer);
-           
-            vk::MemoryAllocateInfo allocInfo = {};
-            allocInfo.setAllocationSize(memRequirements.size);
-            allocInfo.setMemoryTypeIndex(FindMemoryType(memRequirements.memoryTypeBits, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent));
-
-            auto allocResult = s_device.allocateMemory(allocInfo);
-            VK_ASSERT(allocResult);
-            m_deviceMemory = allocResult.value;
-
-            s_device.bindBufferMemory(m_buffer, m_deviceMemory, 0);
+            // If Dynamic, No Staging Buffer, Use Host Visible Buffer
+            if (desc.storageMode == BufferStorageMode::Dynamic)
+            {
+                CreateVulkanBuffer(
+                    desc.size,
+                    MapBufferUsageForVulkan(desc.usage),
+                    vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent, 
+                    m_buffer, 
+                    m_deviceMemory);
+            }
+            else if (desc.storageMode == BufferStorageMode::Static)
+            {
+                CreateVulkanBuffer(
+                    desc.size, 
+                    vk::BufferUsageFlagBits::eTransferDst | MapBufferUsageForVulkan(desc.usage), 
+                    vk::MemoryPropertyFlagBits::eDeviceLocal, 
+                    m_buffer, 
+                    m_deviceMemory);
+            }
         }
 
         ~BufferResource()
         {
+            s_device.waitIdle();
             s_device.destroyBuffer(m_buffer);
             s_device.freeMemory(m_deviceMemory);
+        }
+
+        void CreateVulkanBuffer(size_t size, vk::BufferUsageFlags usage, vk::MemoryPropertyFlags properties, vk::Buffer& buffer, vk::DeviceMemory& bufferMemory)
+        {
+            vk::BufferCreateInfo bufferCreateInfo = {};
+            bufferCreateInfo.setSize(size);
+            bufferCreateInfo.setUsage(usage);
+            bufferCreateInfo.setSharingMode(vk::SharingMode::eExclusive);
+
+            auto createBufferResult = s_device.createBuffer(bufferCreateInfo);
+            VK_ASSERT(createBufferResult);
+            buffer = createBufferResult.value;
+
+            vk::MemoryRequirements memRequirements = s_device.getBufferMemoryRequirements(buffer);
+
+            vk::MemoryAllocateInfo allocInfo = {};
+            allocInfo.setAllocationSize(memRequirements.size);
+            allocInfo.setMemoryTypeIndex(FindMemoryType(memRequirements.memoryTypeBits, properties));
+
+            auto allocResult = s_device.allocateMemory(allocInfo);
+            VK_ASSERT(allocResult);
+            bufferMemory = allocResult.value;
+
+            s_device.bindBufferMemory(buffer, bufferMemory, 0);
         }
 
         uint32_t FindMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties)
@@ -512,17 +537,80 @@ namespace GFX
 
         void Map(size_t offset, size_t size)
         {
-            auto mapMemoryResult = s_device.mapMemory(m_deviceMemory, offset, size);
-            VK_ASSERT(mapMemoryResult);
-            m_mappedPtr = mapMemoryResult.value;
+            if (m_storageMode == BufferStorageMode::Dynamic)
+            {
+                auto mapMemoryResult = s_device.mapMemory(m_deviceMemory, offset, size);
+                VK_ASSERT(mapMemoryResult);
+                m_mappedPtr = mapMemoryResult.value;
+            }
+            else
+            {
+                m_mappedSize = size;
+                m_mappedOffset = offset;
+
+                CreateVulkanBuffer(
+                    m_size,
+                    vk::BufferUsageFlagBits::eTransferSrc,
+                    vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent,
+                    m_stagingBuffer,
+                    m_stagingDeviceMemory);
+
+                auto mapMemoryResult = s_device.mapMemory(m_stagingDeviceMemory, offset, size);
+                VK_ASSERT(mapMemoryResult);
+                m_mappedPtr = mapMemoryResult.value;
+            }
         }
 
         void Unmap()
         {
-            s_device.unmapMemory(m_deviceMemory);
+            if (m_storageMode == BufferStorageMode::Dynamic)
+            {
+                s_device.unmapMemory(m_deviceMemory);
+            }
+            else
+            {
+                // Unmap First
+                s_device.unmapMemory(m_stagingDeviceMemory);
+                // Copy To device memory
+                vk::CommandBufferAllocateInfo commandBufferAllocateInfo = {};
+                commandBufferAllocateInfo.setLevel(vk::CommandBufferLevel::ePrimary);
+                commandBufferAllocateInfo.setCommandPool(s_commandPoolDefault);
+                commandBufferAllocateInfo.setCommandBufferCount(1);
+
+                auto allocateCommandBufferResult = s_device.allocateCommandBuffers(commandBufferAllocateInfo);
+                VK_ASSERT(allocateCommandBufferResult);
+
+                vk::CommandBuffer oneTimeCommandBuffer = allocateCommandBufferResult.value[0];
+                
+                vk::CommandBufferBeginInfo beginInfo = {};
+                beginInfo.setFlags(vk::CommandBufferUsageFlagBits::eOneTimeSubmit);
+                oneTimeCommandBuffer.begin(beginInfo);
+
+                vk::BufferCopy bufferCopy = {};
+                bufferCopy.setSize(m_mappedSize);
+                bufferCopy.setDstOffset(m_mappedOffset);
+                bufferCopy.setSrcOffset(0);
+
+                oneTimeCommandBuffer.copyBuffer(m_stagingBuffer, m_buffer, bufferCopy);
+
+                oneTimeCommandBuffer.end();
+
+                vk::SubmitInfo submitInfo = {};
+                submitInfo.setCommandBufferCount(1);
+                submitInfo.setPCommandBuffers(&oneTimeCommandBuffer);
+
+                s_graphicsQueueDefault.submit(submitInfo, nullptr);
+                s_graphicsQueueDefault.waitIdle();
+
+                s_device.freeCommandBuffers(s_commandPoolDefault, oneTimeCommandBuffer);
+
+                // Clear Stage Buffer
+                s_device.destroyBuffer(m_stagingBuffer);
+                s_device.freeMemory(m_stagingDeviceMemory);
+            }
         }
 
-        void* GetMappedPointer()
+        void* GetMappedPointer() const
         {
             return m_mappedPtr;
         }
@@ -535,9 +623,15 @@ namespace GFX
         uint32_t handle = 0;
 
         void* m_mappedPtr = nullptr;
+        size_t m_mappedSize = 0;
+        size_t m_mappedOffset = 0;
+
         size_t m_size = 0;
         vk::Buffer m_buffer = nullptr;
         vk::DeviceMemory m_deviceMemory = nullptr;
+        vk::Buffer m_stagingBuffer = nullptr;
+        vk::DeviceMemory m_stagingDeviceMemory = nullptr;
+        BufferStorageMode m_storageMode = BufferStorageMode::Dynamic;
     };
 
     /*
@@ -637,6 +731,22 @@ namespace GFX
     {
         s_bufferHandlePool.FreeHandle(buffer.id);
     }
+    /*
+    Buffer Operation
+    */
+
+    void* MapBuffer(const Buffer& buffer, size_t offset, size_t size)
+    {
+        BufferResource* bufferResource = s_bufferHandlePool.FetchResource(buffer.id);
+        bufferResource->Map(offset, size);
+        return bufferResource->GetMappedPointer();
+    }
+
+    void UnmapBuffer(const Buffer& buffer)
+    {
+        BufferResource* bufferResource = s_bufferHandlePool.FetchResource(buffer.id);
+        bufferResource->Unmap();
+    }
 
     /*
     Operations
@@ -645,6 +755,13 @@ namespace GFX
     {
         PipelineResource* pipelineResource = s_pipelineHandlePool.FetchResource(pipeline.id);
         s_commandBuffersDefault[s_currentImageIndex].bindPipeline(vk::PipelineBindPoint::eGraphics, pipelineResource->m_pipeline);
+    }
+
+    void BindVertexBuffer(Buffer buffer, size_t offset, uint32_t binding)
+    {
+        BufferResource* bufferResource = s_bufferHandlePool.FetchResource(buffer.id);
+        vk::DeviceSize vkOffset = {offset};
+        s_commandBuffersDefault[s_currentImageIndex].bindVertexBuffers(binding, 1, &bufferResource->m_buffer, &vkOffset);
     }
 
     void Draw(uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance)
