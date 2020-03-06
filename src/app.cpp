@@ -19,6 +19,7 @@ static GFX::Pipeline pipeline;
 static GFX::Buffer vertexBuffer;
 static GFX::Buffer indexBuffer;
 static GFX::Buffer uniformBuffer;
+static GFX::Buffer uniformBuffer1;
 
 struct Vertex
 {
@@ -98,6 +99,7 @@ void App::Init()
 	uniformBufferDescription.usage = GFX::BufferUsage::UniformBuffer;
 
 	uniformBuffer = GFX::CreateBuffer(uniformBufferDescription);
+	uniformBuffer1 = GFX::CreateBuffer(uniformBufferDescription);
 
 	GFX::ShaderDescription vertDesc = {};
 	vertDesc.name = "default";
@@ -130,8 +132,6 @@ void App::Init()
 	pipelineDesc.uniformBindings = uniformBindings;
 
 	pipeline = GFX::CreatePipeline(pipelineDesc);
-
-	GFX::BindUniform(pipeline, 0, uniformBuffer, 0, sizeof(UniformBufferObject));
 }
 
 void App::MainLoop()
@@ -154,12 +154,19 @@ void App::MainLoop()
 
 			GFX::UpdateBuffer(uniformBuffer, 0, sizeof(UniformBufferObject), &ubo);
 
+			ubo.model = glm::rotate(glm::mat4(1.0f), -time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+			GFX::UpdateBuffer(uniformBuffer1, 0, sizeof(UniformBufferObject), &ubo);
+
 			GFX::BindIndexBuffer(indexBuffer, 0, GFX::IndexType::UInt16);
 			GFX::BindVertexBuffer(vertexBuffer, 0);
 			
 			GFX::SetViewport(0, 0, s_width, s_height);
 			GFX::SetScissor(0, 0, s_width, s_height);
 			
+			GFX::BindUniform(pipeline, 0, uniformBuffer, 0, sizeof(UniformBufferObject));
+			GFX::DrawIndexed(indices.size(), 1, 0);
+
+			GFX::BindUniform(pipeline, 0, uniformBuffer1, 0, sizeof(UniformBufferObject));
 			GFX::DrawIndexed(indices.size(), 1, 0);
 
 			GFX::EndRenderPass();
@@ -174,6 +181,7 @@ void App::CleanUp()
 	GFX::DestroyBuffer(vertexBuffer);
 	GFX::DestroyBuffer(indexBuffer);
 	GFX::DestroyBuffer(uniformBuffer);
+	GFX::DestroyBuffer(uniformBuffer1);
 
 	GFX::DestroyPipeline(pipeline);
 

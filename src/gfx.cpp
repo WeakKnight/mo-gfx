@@ -803,6 +803,8 @@ namespace GFX
         PipelineResource* pipelineResource = s_pipelineHandlePool.FetchResource(pipeline.id);
         BufferResource* bufferResource = s_bufferHandlePool.FetchResource(buffer.id);
         
+        s_device.waitIdle();
+
         for (size_t i = 0; i < s_swapChainImages.size(); i++)
         {
             vk::DescriptorBufferInfo bufferInfo = {};
