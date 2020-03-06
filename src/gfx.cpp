@@ -36,6 +36,7 @@ namespace GFX
     static vk::Instance s_instance = nullptr;
     static vk::PhysicalDevice s_physicalDevice = nullptr;
     static vk::PhysicalDeviceMemoryProperties s_physicalDeviceMemoryProperties;
+    static vk::PhysicalDeviceProperties s_physicalDeviceProperties;
     static vk::Device s_device = nullptr;
 
     static VkSurfaceKHR s_surface = nullptr;
@@ -561,6 +562,31 @@ namespace GFX
             s_device.freeMemory(m_deviceMemory);
         }
 
+        void LazyCreateDescriptorSets(PipelineResource* pipeline)
+        {
+            if (m_descriptorSets.size() != 0)
+            {
+                return;
+            }
+
+            size_t setCount = 1;
+
+            if (m_storageMode == BufferStorageMode::Dynamic)
+            {
+                setCount = s_swapChainImages.size();
+            }
+
+            std::vector<vk::DescriptorSetLayout> descriptorSetLayouts(setCount, pipeline->m_descriptorSetLayout);
+
+            vk::DescriptorSetAllocateInfo descriptorSetAllocateInfo = {};
+            descriptorSetAllocateInfo.setDescriptorPool(s_descriptorPoolDefault);
+            descriptorSetAllocateInfo.setDescriptorSetCount(setCount);
+            descriptorSetAllocateInfo.setPSetLayouts(descriptorSetLayouts.data());
+
+            auto allocateDescriptorSetsResult = s_device.allocateDescriptorSets(descriptorSetAllocateInfo);
+            m_descriptorSets = allocateDescriptorSetsResult.value;
+        }
+
         void CreateVulkanBuffer(size_t size, vk::BufferUsageFlags usage, vk::MemoryPropertyFlags properties, vk::Buffer& buffer, vk::DeviceMemory& bufferMemory)
         {
             vk::BufferCreateInfo bufferCreateInfo = {};
@@ -698,6 +724,8 @@ namespace GFX
         vk::DeviceMemory m_stagingDeviceMemory = nullptr;
         BufferStorageMode m_storageMode = BufferStorageMode::Dynamic;
         BufferUsage m_usage;
+
+        std::vector<vk::DescriptorSet> m_descriptorSets;
     };
 
     /*
@@ -791,6 +819,20 @@ namespace GFX
     //    BufferResource* bufferResource = s_bufferHandlePool.FetchResource(buffer.id);
     //    bufferResource->Unmap();
     //}
+    size_t GetMinimumUniformBufferAlignment()
+    {
+        return s_physicalDeviceProperties.limits.minUniformBufferOffsetAlignment;
+    }
+
+    size_t AlignmentSize(size_t size, size_t alignment)
+    {
+        if (size <= alignment)
+        {
+            return alignment;
+        }
+
+        return size + (size % alignment);
+    }
 
     void UpdateBuffer(Buffer buffer, size_t offset, size_t size, void* data)
     {
@@ -805,31 +847,49 @@ namespace GFX
         
         s_device.waitIdle();
 
-        for (size_t i = 0; i < s_swapChainImages.size(); i++)
+        bufferResource->LazyCreateDescriptorSets(pipelineResource);
+
+        if (bufferResource->m_storageMode == BufferStorageMode::Dynamic)
+        {
+            for (size_t i = 0; i < s_swapChainImages.size(); i++)
+            {
+                vk::DescriptorBufferInfo bufferInfo = {};
+                bufferInfo.setBuffer(bufferResource->m_buffer);
+                bufferInfo.setOffset(offset + (bufferResource->m_size * i));
+                assert((offset + (bufferResource->m_size * i)) % s_physicalDeviceProperties.limits.minUniformBufferOffsetAlignment == 0);
+                bufferInfo.setRange(range);
+
+                vk::WriteDescriptorSet writeDescriptorSet = {};
+                writeDescriptorSet.setDescriptorCount(1);
+                writeDescriptorSet.setPBufferInfo(&bufferInfo);
+                writeDescriptorSet.setDstBinding(binding);
+                writeDescriptorSet.setDstArrayElement(0);
+                writeDescriptorSet.setDstSet(bufferResource->m_descriptorSets[i]);
+                writeDescriptorSet.setDescriptorType(vk::DescriptorType::eUniformBuffer);
+
+                s_device.updateDescriptorSets(writeDescriptorSet, nullptr);
+            }
+
+            s_commandBuffersDefault[s_currentImageIndex].bindDescriptorSets(vk::PipelineBindPoint::eGraphics, s_currentPipleline->m_pipelineLayout, 0, bufferResource->m_descriptorSets[s_currentImageIndex], nullptr);
+        }
+        else
         {
             vk::DescriptorBufferInfo bufferInfo = {};
             bufferInfo.setBuffer(bufferResource->m_buffer);
-
-            if (bufferResource->m_usage == BufferUsage::UniformBuffer && bufferResource->m_storageMode == BufferStorageMode::Dynamic)
-            {
-                bufferInfo.setOffset(offset + (bufferResource->m_size * i));
-            }
-            else
-            {
-                bufferInfo.setOffset(offset);
-            }
-
+            bufferInfo.setOffset(offset);
             bufferInfo.setRange(range);
-       
+
             vk::WriteDescriptorSet writeDescriptorSet = {};
             writeDescriptorSet.setDescriptorCount(1);
             writeDescriptorSet.setPBufferInfo(&bufferInfo);
             writeDescriptorSet.setDstBinding(binding);
             writeDescriptorSet.setDstArrayElement(0);
-            writeDescriptorSet.setDstSet(pipelineResource->m_descriptorSets[i]);
+            writeDescriptorSet.setDstSet(bufferResource->m_descriptorSets[0]);
             writeDescriptorSet.setDescriptorType(vk::DescriptorType::eUniformBuffer);
-            
+
             s_device.updateDescriptorSets(writeDescriptorSet, nullptr);
+
+            s_commandBuffersDefault[s_currentImageIndex].bindDescriptorSets(vk::PipelineBindPoint::eGraphics, s_currentPipleline->m_pipelineLayout, 0, bufferResource->m_descriptorSets[0], nullptr);
         }
     }
 
@@ -859,13 +919,11 @@ namespace GFX
 
     void Draw(uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance)
     {
-        s_commandBuffersDefault[s_currentImageIndex].bindDescriptorSets(vk::PipelineBindPoint::eGraphics, s_currentPipleline->m_pipelineLayout, 0, s_currentPipleline->m_descriptorSets[s_currentImageIndex], nullptr);
         s_commandBuffersDefault[s_currentImageIndex].draw(vertexCount, instanceCount, firstVertex, firstInstance);
     }
 
     void DrawIndexed(uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, uint32_t vertexOffset, uint32_t firstInstance)
     {
-        s_commandBuffersDefault[s_currentImageIndex].bindDescriptorSets(vk::PipelineBindPoint::eGraphics, s_currentPipleline->m_pipelineLayout, 0, s_currentPipleline->m_descriptorSets[s_currentImageIndex], nullptr);
         s_commandBuffersDefault[s_currentImageIndex].drawIndexed(indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
     }
 
@@ -944,6 +1002,7 @@ namespace GFX
         VK_ASSERT(enumeratePhysicalDevicesResult);
         s_physicalDevice = ChooseDevice(enumeratePhysicalDevicesResult.value);
         s_physicalDeviceMemoryProperties = s_physicalDevice.getMemoryProperties();
+        s_physicalDeviceProperties = s_physicalDevice.getProperties();
 
         // Create Surface
         glfwCreateWindowSurface(s_instance, desc.window, nullptr, &s_surface);
@@ -1373,7 +1432,7 @@ namespace GFX
         vk::DescriptorPoolCreateInfo poolCreateInfo = {};
         poolCreateInfo.setPoolSizeCount(sizes.size());
         poolCreateInfo.setPPoolSizes(sizes.data());
-        poolCreateInfo.setMaxSets(s_swapChainImages.size());
+        poolCreateInfo.setMaxSets(1000);
 
         auto createDescriptorPoolResult = s_device.createDescriptorPool(poolCreateInfo);
         VK_ASSERT(createDescriptorPoolResult);

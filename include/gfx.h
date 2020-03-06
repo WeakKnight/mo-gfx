@@ -297,6 +297,10 @@ namespace GFX
     Buffer Operation
     */
 
+    size_t GetMinimumUniformBufferAlignment();
+
+    size_t AlignmentSize(size_t size, size_t alignment);
+
     ///*
     //Return Mapped Buffer Pointer
     //*/
