@@ -175,6 +175,7 @@ void App::MainLoop()
 			GFX::DrawIndexed(indices.size(), 1, 0);
 
 			//GFX::BindUniform(pipeline, 0, uniformBuffer1, 0, sizeof(UniformBufferObject));
+			//GFX::BindUniform(pipeline, 1, uniformBuffer1, 0, sizeof(UniformBufferObject));
 			//GFX::DrawIndexed(indices.size(), 1, 0);
 
 			GFX::EndRenderPass();
