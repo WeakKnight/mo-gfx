@@ -232,13 +232,38 @@ namespace GFX
         uint32_t m_bindingPosition = 0;
     };
 
+    enum class UniformType
+    {
+        UniformBuffer,
+        Sampler
+    };
+
     struct UniformBindings
     {
         struct UniformDescription
         {
-            size_t size = 0;
-            size_t offset = 0;
+            uint32_t binding = 0;
+            UniformType type;
+            ShaderStage stage;
+            uint32_t count;
         };
+
+        /*
+        Binding Position
+        Uniform Type(buffer or sampler?)
+        Stage(Vertex Shader Or Fragment Shader Or Other?)
+        Count(Array Or Single Value?)
+        */
+        void AddUniformDescription(uint32_t binding, UniformType type, ShaderStage stage, uint32_t count)
+        {
+            UniformDescription desc = {};
+            desc.binding = binding;
+            desc.type = type;
+            desc.stage = stage;
+            desc.count = count;
+
+            m_layout.push_back(desc);
+        }
 
         std::vector<UniformDescription> m_layout;
     };
@@ -247,7 +272,8 @@ namespace GFX
     {
         std::vector<Shader> shaders;
         PrimitiveTopology primitiveTopology;
-        VertexBindings bindings;
+        VertexBindings vertexBindings;
+        UniformBindings uniformBindings;
     };
 
     struct Pipeline
@@ -271,15 +297,22 @@ namespace GFX
     Buffer Operation
     */
 
-    /*
-    Return Mapped Buffer Pointer
-    */
-    void* MapBuffer(const Buffer& buffer, size_t offset, size_t size);
+    ///*
+    //Return Mapped Buffer Pointer
+    //*/
+    //void* MapBuffer(const Buffer& buffer, size_t offset, size_t size);
+
+    ///*
+    //Unmap A Buffer
+    //*/
+    //void UnmapBuffer(const Buffer& buffer);
+
+    void UpdateBuffer(Buffer buffer, size_t offset, size_t size, void* data);
 
     /*
-    Unmap A Buffer
+    Uniforms
     */
-    void UnmapBuffer(const Buffer& buffer);
+    void BindUniform(Pipeline pipeline, uint32_t binding, Buffer buffer, size_t offset, size_t range);
 
     /*
     Rendering Operation

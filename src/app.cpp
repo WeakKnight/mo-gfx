@@ -3,7 +3,9 @@
 #include <spdlog/spdlog.h>
 #include "gfx.h"
 #include "string_utils.h"
+#define GLM_FORCE_RADIANS
 #include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 
 const int WIDTH = 800;
 const int HEIGHT = 600;
@@ -16,6 +18,7 @@ static GFX::Shader fragShader;
 static GFX::Pipeline pipeline;
 static GFX::Buffer vertexBuffer;
 static GFX::Buffer indexBuffer;
+static GFX::Buffer uniformBuffer;
 
 struct Vertex
 {
@@ -79,9 +82,7 @@ void App::Init()
 	vertexBufferDescription.usage = GFX::BufferUsage::VertexBuffer;
 
 	vertexBuffer = GFX::CreateBuffer(vertexBufferDescription);
-	void* vertexData = GFX::MapBuffer(vertexBuffer, 0, vertexBufferDescription.size);
-	memcpy(vertexData, vertices.data(), vertexBufferDescription.size);
-	GFX::UnmapBuffer(vertexBuffer);
+	GFX::UpdateBuffer(vertexBuffer, 0, vertexBufferDescription.size, (void*)vertices.data());
 
 	GFX::BufferDescription indexBufferDescription = {};
 	indexBufferDescription.size = sizeof(uint16_t) * indices.size();
@@ -89,9 +90,14 @@ void App::Init()
 	indexBufferDescription.usage = GFX::BufferUsage::IndexBuffer;
 
 	indexBuffer = GFX::CreateBuffer(indexBufferDescription);
-	void* indexData = GFX::MapBuffer(indexBuffer, 0, indexBufferDescription.size);
-	memcpy(indexData, indices.data(), indexBufferDescription.size);
-	GFX::UnmapBuffer(indexBuffer);
+	GFX::UpdateBuffer(indexBuffer, 0, indexBufferDescription.size, (void*)indices.data());
+
+	GFX::BufferDescription uniformBufferDescription = {};
+	uniformBufferDescription.size = sizeof(UniformBufferObject);
+	uniformBufferDescription.storageMode = GFX::BufferStorageMode::Dynamic;
+	uniformBufferDescription.usage = GFX::BufferUsage::UniformBuffer;
+
+	uniformBuffer = GFX::CreateBuffer(uniformBufferDescription);
 
 	GFX::ShaderDescription vertDesc = {};
 	vertDesc.name = "default";
@@ -106,20 +112,26 @@ void App::Init()
 	vertShader = GFX::CreateShader(vertDesc);
 	fragShader = GFX::CreateShader(fragDesc);
 
-	GFX::VertexBindings bindings = {};
-	bindings.AddAttribute(0, offsetof(Vertex, pos), GFX::ValueType::Float32x2);
-	bindings.AddAttribute(1, offsetof(Vertex, color), GFX::ValueType::Float32x3);
-	bindings.SetStrideSize(sizeof(Vertex));
-	bindings.SetBindingType(GFX::BindingType::Vertex);
-	bindings.SetBindingPosition(0);
+	GFX::VertexBindings vertexBindings = {};
+	vertexBindings.AddAttribute(0, offsetof(Vertex, pos), GFX::ValueType::Float32x2);
+	vertexBindings.AddAttribute(1, offsetof(Vertex, color), GFX::ValueType::Float32x3);
+	vertexBindings.SetStrideSize(sizeof(Vertex));
+	vertexBindings.SetBindingType(GFX::BindingType::Vertex);
+	vertexBindings.SetBindingPosition(0);
+
+	GFX::UniformBindings uniformBindings = {};
+	uniformBindings.AddUniformDescription(0, GFX::UniformType::UniformBuffer, GFX::ShaderStage::Vertex, 1);
 
 	GFX::GraphicsPipelineDescription pipelineDesc = {};
 	pipelineDesc.primitiveTopology = GFX::PrimitiveTopology::TriangleList;
 	pipelineDesc.shaders.push_back(vertShader);
 	pipelineDesc.shaders.push_back(fragShader);
-	pipelineDesc.bindings = bindings;
+	pipelineDesc.vertexBindings = vertexBindings;
+	pipelineDesc.uniformBindings = uniformBindings;
 
 	pipeline = GFX::CreatePipeline(pipelineDesc);
+
+	GFX::BindUniform(pipeline, 0, uniformBuffer, 0, sizeof(UniformBufferObject));
 }
 
 void App::MainLoop()
@@ -134,6 +146,14 @@ void App::MainLoop()
 
 			GFX::ApplyPipeline(pipeline);
 			
+			float time = (float)glfwGetTime();
+			UniformBufferObject ubo = {};
+			ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+			ubo.view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+			ubo.proj = glm::perspective(glm::radians(45.0f), (float)s_width/(float)s_height, 0.1f, 10.0f);
+
+			GFX::UpdateBuffer(uniformBuffer, 0, sizeof(UniformBufferObject), &ubo);
+
 			GFX::BindIndexBuffer(indexBuffer, 0, GFX::IndexType::UInt16);
 			GFX::BindVertexBuffer(vertexBuffer, 0);
 			
@@ -153,6 +173,7 @@ void App::CleanUp()
 {
 	GFX::DestroyBuffer(vertexBuffer);
 	GFX::DestroyBuffer(indexBuffer);
+	GFX::DestroyBuffer(uniformBuffer);
 
 	GFX::DestroyPipeline(pipeline);
 
