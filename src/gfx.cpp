@@ -5,6 +5,7 @@
 #include <GLFW/glfw3.h>
 #include <shaderc/shaderc.hpp>
 #include <spdlog/spdlog.h>
+#include <map>
 
 #define VK_ASSERT(resultObj) assert(resultObj.result == vk::Result::eSuccess)
 
@@ -113,6 +114,11 @@ namespace GFX
     vk::DescriptorPool s_descriptorPoolDefault = nullptr;
 
     /*
+    Current Descriptor Set
+    */
+    std::map<uint32_t, vk::DescriptorSet> s_currentDescriptors;
+
+    /*
     Sync Objects
     */
     const int MAX_FRAMES_IN_FLIGHT = 2;
@@ -191,6 +197,8 @@ namespace GFX
     vk::IndexType MapIndexTypeFormatForVulkan(IndexType indexType);
     vk::ShaderStageFlagBits MapShaderStageForVulkan(const ShaderStage& stage);
     vk::DescriptorType MapUniformTypeForVulkan(const UniformType& uniformType);
+
+    uint32_t HashTwoInt(uint32_t a, uint32_t b);
 
     /*
     ===========================================Internal Struct Definition===================================================
@@ -840,7 +848,7 @@ namespace GFX
         bufferResource->Update(offset, size, data);
     }
 
-    void BindUniform(Pipeline pipeline, uint32_t binding, Buffer buffer, size_t offset, size_t range)
+    void UpdateUniform(Pipeline pipeline, uint32_t binding, Buffer buffer, size_t offset, size_t range)
     {
         PipelineResource* pipelineResource = s_pipelineHandlePool.FetchResource(pipeline.id);
         BufferResource* bufferResource = s_bufferHandlePool.FetchResource(buffer.id);
@@ -870,7 +878,7 @@ namespace GFX
                 s_device.updateDescriptorSets(writeDescriptorSet, nullptr);
             }
 
-            s_commandBuffersDefault[s_currentImageIndex].bindDescriptorSets(vk::PipelineBindPoint::eGraphics, s_currentPipleline->m_pipelineLayout, 0, bufferResource->m_descriptorSets[s_currentImageIndex], nullptr);
+            // s_commandBuffersDefault[s_currentImageIndex].bindDescriptorSets(vk::PipelineBindPoint::eGraphics, s_currentPipleline->m_pipelineLayout, 0, bufferResource->m_descriptorSets[s_currentImageIndex], nullptr);
         }
         else
         {
@@ -889,7 +897,20 @@ namespace GFX
 
             s_device.updateDescriptorSets(writeDescriptorSet, nullptr);
 
-            s_commandBuffersDefault[s_currentImageIndex].bindDescriptorSets(vk::PipelineBindPoint::eGraphics, s_currentPipleline->m_pipelineLayout, 0, bufferResource->m_descriptorSets[0], nullptr);
+            // s_commandBuffersDefault[s_currentImageIndex].bindDescriptorSets(vk::PipelineBindPoint::eGraphics, s_currentPipleline->m_pipelineLayout, 0, bufferResource->m_descriptorSets[0], nullptr);
+        }
+    }
+
+    void BindUniform(uint32_t set, Buffer buffer)
+    {
+        BufferResource* bufferResource = s_bufferHandlePool.FetchResource(buffer.id);
+        if (bufferResource->m_storageMode == BufferStorageMode::Dynamic)
+        {
+            s_currentDescriptors[set] = bufferResource->m_descriptorSets[s_currentImageIndex];
+        }
+        else
+        {
+            s_currentDescriptors[set] = bufferResource->m_descriptorSets[0];
         }
     }
 
@@ -898,6 +919,8 @@ namespace GFX
     */
     void ApplyPipeline(Pipeline pipeline)
     {
+        s_currentDescriptors.clear();
+
         PipelineResource* pipelineResource = s_pipelineHandlePool.FetchResource(pipeline.id);
         s_currentPipleline = pipelineResource;
 
@@ -919,11 +942,25 @@ namespace GFX
 
     void Draw(uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance)
     {
+        std::vector<vk::DescriptorSet> descriptorSets;
+        for (int i = 0; i < s_currentDescriptors.size(); i++)
+        {
+            descriptorSets.push_back(s_currentDescriptors[i]);
+        }
+        s_commandBuffersDefault[s_currentImageIndex].bindDescriptorSets(vk::PipelineBindPoint::eGraphics, s_currentPipleline->m_pipelineLayout, 0, descriptorSets, nullptr);
+
         s_commandBuffersDefault[s_currentImageIndex].draw(vertexCount, instanceCount, firstVertex, firstInstance);
     }
 
     void DrawIndexed(uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, uint32_t vertexOffset, uint32_t firstInstance)
     {
+        std::vector<vk::DescriptorSet> descriptorSets;
+        for (int i = 0; i < s_currentDescriptors.size(); i++)
+        {
+            descriptorSets.push_back(s_currentDescriptors[i]);
+        }
+        s_commandBuffersDefault[s_currentImageIndex].bindDescriptorSets(vk::PipelineBindPoint::eGraphics, s_currentPipleline->m_pipelineLayout, 0, descriptorSets, nullptr);
+
         s_commandBuffersDefault[s_currentImageIndex].drawIndexed(indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
     }
 
@@ -1546,6 +1583,11 @@ namespace GFX
         case UniformType::Sampler:
             return vk::DescriptorType::eSampler;
         }
+    }
+
+    uint32_t HashTwoInt(uint32_t a, uint32_t b)
+    {
+        return (a + b) * (a + b + 1) / 2 + b;
     }
 
     bool CheckLayerSupport(const std::vector<const char*> expectedLayers)

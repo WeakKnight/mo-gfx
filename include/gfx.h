@@ -313,10 +313,12 @@ namespace GFX
 
     void UpdateBuffer(Buffer buffer, size_t offset, size_t size, void* data);
 
+    
     /*
     Uniforms
     */
-    void BindUniform(Pipeline pipeline, uint32_t binding, Buffer buffer, size_t offset, size_t range);
+    void UpdateUniform(Pipeline pipeline, uint32_t binding, Buffer buffer, size_t offset, size_t range);
+    void BindUniform(uint32_t set, Buffer buffer);
 
     /*
     Rendering Operation
