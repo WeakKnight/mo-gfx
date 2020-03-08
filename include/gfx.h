@@ -238,9 +238,9 @@ namespace GFX
         Sampler
     };
 
-    struct UniformBindings
+    struct UniformLayoutDescription
     {
-        struct UniformDescription
+        struct UniformBinding
         {
             uint32_t binding = 0;
             UniformType type;
@@ -248,15 +248,9 @@ namespace GFX
             uint32_t count;
         };
 
-        /*
-        Binding Position
-        Uniform Type(buffer or sampler?)
-        Stage(Vertex Shader Or Fragment Shader Or Other?)
-        Count(Array Or Single Value?)
-        */
-        void AddUniformDescription(uint32_t binding, UniformType type, ShaderStage stage, uint32_t count)
+        void AddUniformBinding(uint32_t binding, UniformType type, ShaderStage stage, uint32_t count)
         {
-            UniformDescription desc = {};
+            UniformBinding desc = {};
             desc.binding = binding;
             desc.type = type;
             desc.stage = stage;
@@ -265,7 +259,69 @@ namespace GFX
             m_layout.push_back(desc);
         }
 
-        std::vector<UniformDescription> m_layout;
+        std::vector<UniformBinding> m_layout;
+    };
+
+    struct UniformLayout
+    {
+        uint32_t id = 0;
+    };
+
+    struct UniformBindings
+    {
+        void AddUniformLayout(UniformLayout layout)
+        {
+            m_layouts.push_back(layout);
+        }
+
+        std::vector<UniformLayout> m_layouts;
+    };
+
+    enum class UniformStorageMode
+    {
+        Dynamic,
+        Static
+    };
+
+    struct UniformAtrribute
+    {
+        uint32_t binding;
+        Buffer buffer;
+        size_t offset;
+        size_t range;
+    };
+
+    struct UniformDescription
+    {
+        void AddBufferAttribute(uint32_t binding, Buffer buffer, size_t offset, size_t range)
+        {
+            UniformAtrribute attr = {};
+            attr.binding = binding;
+            attr.buffer = buffer;
+            attr.offset = offset;
+            attr.range = range;
+
+            m_atrributes.push_back(attr);
+        }
+
+        void SetUniformLayout(UniformLayout layout)
+        {
+            m_layout = layout;
+        }
+
+        void SetStorageMode(UniformStorageMode storageMode)
+        {
+            m_storageMode = storageMode;
+        }
+
+        UniformLayout m_layout;
+        UniformStorageMode m_storageMode;
+        std::vector<UniformAtrribute> m_atrributes;
+    };
+
+    struct Uniform
+    {
+        uint32_t id = 0;
     };
 
     struct GraphicsPipelineDescription
@@ -287,11 +343,15 @@ namespace GFX
     Shader CreateShader(const ShaderDescription& desc);
     RenderPass CreateRenderPass(const RenderPassDescription& desc);
     Buffer CreateBuffer(const BufferDescription& desc);
+    UniformLayout CreateUniformLayout(const UniformLayoutDescription& desc);
+    Uniform CreateUniform(const UniformDescription& desc);
     
     void DestroyShader(const Shader& shader);
     void DestroyPipeline(const Pipeline& pipeline);
     void DestroyRenderPass(const RenderPass& renderPass);
     void DestroyBuffer(const Buffer& buffer);
+    void DestroyUniformLayout(const UniformLayout& uniformLayout);
+    void DestroyUniform(const Uniform& uniform);
 
     /*
     Buffer Operation
@@ -301,24 +361,14 @@ namespace GFX
 
     size_t AlignmentSize(size_t size, size_t alignment);
 
-    ///*
-    //Return Mapped Buffer Pointer
-    //*/
-    //void* MapBuffer(const Buffer& buffer, size_t offset, size_t size);
-
-    ///*
-    //Unmap A Buffer
-    //*/
-    //void UnmapBuffer(const Buffer& buffer);
-
     void UpdateBuffer(Buffer buffer, size_t offset, size_t size, void* data);
 
     
     /*
     Uniforms
     */
-    void UpdateUniform(Pipeline pipeline, uint32_t binding, Buffer buffer, size_t offset, size_t range);
-    void BindUniform(uint32_t set, Buffer buffer);
+    void BindUniform(Uniform uniform, uint32_t set);
+    void UpdateUniformBuffer(Uniform uniform, uint32_t binding, void* data);
 
     /*
     Rendering Operation

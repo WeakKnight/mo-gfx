@@ -19,7 +19,8 @@ static GFX::Pipeline pipeline;
 static GFX::Buffer vertexBuffer;
 static GFX::Buffer indexBuffer;
 static GFX::Buffer uniformBuffer;
-static GFX::Buffer uniformBuffer1;
+static GFX::UniformLayout uniformLayout;
+static GFX::Uniform uniform;
 
 struct Vertex
 {
@@ -120,9 +121,14 @@ void App::Init()
 	vertexBindings.SetBindingType(GFX::BindingType::Vertex);
 	vertexBindings.SetBindingPosition(0);
 
+	GFX::UniformLayoutDescription uniformLayoutDesc = {};
+	uniformLayoutDesc.AddUniformBinding(0, GFX::UniformType::UniformBuffer, GFX::ShaderStage::Vertex, 1);
+	uniformLayoutDesc.AddUniformBinding(1, GFX::UniformType::UniformBuffer, GFX::ShaderStage::Vertex, 1);
+
+	uniformLayout = GFX::CreateUniformLayout(uniformLayoutDesc);
+
 	GFX::UniformBindings uniformBindings = {};
-	uniformBindings.AddUniformDescription(0, GFX::UniformType::UniformBuffer, GFX::ShaderStage::Vertex, 1);
-	uniformBindings.AddUniformDescription(1, GFX::UniformType::UniformBuffer, GFX::ShaderStage::Vertex, 1);
+	uniformBindings.AddUniformLayout(uniformLayout);
 
 	GFX::GraphicsPipelineDescription pipelineDesc = {};
 	pipelineDesc.primitiveTopology = GFX::PrimitiveTopology::TriangleList;
@@ -132,13 +138,25 @@ void App::Init()
 	pipelineDesc.uniformBindings = uniformBindings;
 
 	pipeline = GFX::CreatePipeline(pipelineDesc);
+
+	GFX::UniformDescription uniformDesc = {};
+	uniformDesc.SetUniformLayout(uniformLayout);
+	uniformDesc.SetStorageMode(GFX::UniformStorageMode::Dynamic);
+	uniformDesc.AddBufferAttribute(0, uniformBuffer, 0, sizeof(UniformBufferObject));
+	uniformDesc.AddBufferAttribute(
+		1,
+		uniformBuffer,
+		GFX::AlignmentSize(
+			sizeof(UniformBufferObject),
+			GFX::GetMinimumUniformBufferAlignment()),
+		sizeof(float)
+	);
+
+	uniform = GFX::CreateUniform(uniformDesc);
 }
 
 void App::MainLoop()
 {
-	GFX::UpdateUniform(pipeline, 0, uniformBuffer, 0, sizeof(UniformBufferObject));
-	GFX::UpdateUniform(pipeline, 1, uniformBuffer, GFX::AlignmentSize(sizeof(UniformBufferObject), GFX::GetMinimumUniformBufferAlignment()), sizeof(float));
-
 	while (!glfwWindowShouldClose(m_window)) 
 	{
 		glfwPollEvents();
@@ -155,8 +173,8 @@ void App::MainLoop()
 			ubo.view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
 			ubo.proj = glm::perspective(glm::radians(45.0f), (float)s_width/(float)s_height, 0.1f, 10.0f);
 
-			GFX::UpdateBuffer(uniformBuffer, 0, sizeof(UniformBufferObject), &ubo);
-			GFX::UpdateBuffer(uniformBuffer, GFX::AlignmentSize(sizeof(UniformBufferObject), GFX::GetMinimumUniformBufferAlignment()), sizeof(float), &time);
+			GFX::UpdateUniformBuffer(uniform, 0, &ubo);
+			GFX::UpdateUniformBuffer(uniform, 1, &time);
 
 			GFX::BindIndexBuffer(indexBuffer, 0, GFX::IndexType::UInt16);
 			GFX::BindVertexBuffer(vertexBuffer, 0);
@@ -164,7 +182,7 @@ void App::MainLoop()
 			GFX::SetViewport(0, 0, s_width, s_height);
 			GFX::SetScissor(0, 0, s_width, s_height);
 
-			GFX::BindUniform(0, uniformBuffer);
+			GFX::BindUniform(uniform, 0);
 
 			GFX::DrawIndexed(indices.size(), 1, 0);
 
@@ -177,6 +195,9 @@ void App::MainLoop()
 
 void App::CleanUp()
 {
+	GFX::DestroyUniform(uniform);
+	GFX::DestroyUniformLayout(uniformLayout);
+
 	GFX::DestroyBuffer(vertexBuffer);
 	GFX::DestroyBuffer(indexBuffer);
 	GFX::DestroyBuffer(uniformBuffer);

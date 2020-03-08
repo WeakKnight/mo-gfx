@@ -19,6 +19,8 @@ namespace GFX
     struct ShaderResource;
     struct RenderPassResource;
     struct BufferResource;
+    struct UniformLayoutResource;
+    struct UniformResource;
     /*
     ===================================================Static Global Variables====================================================
     */
@@ -30,6 +32,8 @@ namespace GFX
     static HandlePool<ShaderResource> s_shaderHandlePool = HandlePool<ShaderResource>(200);
     static HandlePool<RenderPassResource> s_renderPassHandlePool = HandlePool<RenderPassResource>(200);
     static HandlePool<BufferResource> s_bufferHandlePool = HandlePool<BufferResource>(512);
+    static HandlePool<UniformLayoutResource> s_uniformLayoutHandlePool = HandlePool<UniformLayoutResource>(128);
+    static HandlePool<UniformResource> s_uniformHandlePool = HandlePool<UniformResource>(256);
 
     /*
     Device Instance
@@ -305,6 +309,41 @@ namespace GFX
         ShaderStage m_shaderStage = ShaderStage::None;
     };
 
+    struct UniformLayoutResource
+    {
+        UniformLayoutResource(const UniformLayoutDescription& desc)
+        {
+            std::vector<vk::DescriptorSetLayoutBinding> descriptorSetLayoutBindings;
+
+            for (auto uniformDesc : desc.m_layout)
+            {
+                vk::DescriptorSetLayoutBinding layoutBinding = {};
+                layoutBinding.setBinding(uniformDesc.binding);
+                layoutBinding.setDescriptorCount(uniformDesc.count);
+                layoutBinding.setStageFlags(MapShaderStageForVulkan(uniformDesc.stage));
+                layoutBinding.setDescriptorType(MapUniformTypeForVulkan(uniformDesc.type));
+
+                descriptorSetLayoutBindings.push_back(layoutBinding);
+            }
+
+            vk::DescriptorSetLayoutCreateInfo descriptorSetLayoutCreateInfo = {};
+            descriptorSetLayoutCreateInfo.setBindingCount(desc.m_layout.size());
+            descriptorSetLayoutCreateInfo.setPBindings(descriptorSetLayoutBindings.data());
+
+            auto createDescriptorSetLayoutResult = s_device.createDescriptorSetLayout(descriptorSetLayoutCreateInfo);
+            VK_ASSERT(createDescriptorSetLayoutResult);
+            m_descriptorSetLayout = createDescriptorSetLayoutResult.value;
+        }
+
+        ~UniformLayoutResource()
+        {
+            s_device.destroyDescriptorSetLayout(m_descriptorSetLayout);
+        }
+
+        uint32_t handle = 0;
+        vk::DescriptorSetLayout m_descriptorSetLayout = nullptr;
+    };
+
     struct PipelineResource
     {
         PipelineResource(const GraphicsPipelineDescription& desc)
@@ -382,38 +421,18 @@ namespace GFX
             dynamicStateCreateInfo.setDynamicStateCount(dynamicStates.size());
             dynamicStateCreateInfo.setPDynamicStates(dynamicStates.data());
             
-            /* 
-            Uniform Bindings 
-            */
-
-            std::vector<vk::DescriptorSetLayoutBinding> descriptorSetLayoutBindings;
-
-            for (auto uniformDesc : desc.uniformBindings.m_layout)
-            {
-                vk::DescriptorSetLayoutBinding layoutBinding = {};
-                layoutBinding.setBinding(uniformDesc.binding);
-                layoutBinding.setDescriptorCount(uniformDesc.count);
-                layoutBinding.setStageFlags(MapShaderStageForVulkan(uniformDesc.stage));
-                layoutBinding.setDescriptorType(MapUniformTypeForVulkan(uniformDesc.type));
-
-                descriptorSetLayoutBindings.push_back(layoutBinding);
-            }
-
-            vk::DescriptorSetLayoutCreateInfo descriptorSetLayoutCreateInfo = {};
-            descriptorSetLayoutCreateInfo.setBindingCount(desc.uniformBindings.m_layout.size());
-            descriptorSetLayoutCreateInfo.setPBindings(descriptorSetLayoutBindings.data());
-
-            auto createDescriptorSetLayoutResult = s_device.createDescriptorSetLayout(descriptorSetLayoutCreateInfo);
-            VK_ASSERT(createDescriptorSetLayoutResult);
-            m_descriptorSetLayout = createDescriptorSetLayoutResult.value;
-
             /*
             Pipeline Layout
             */
+            m_descriptorSetLayouts.resize(desc.uniformBindings.m_layouts.size());
+            for (size_t i = 0; i < m_descriptorSetLayouts.size(); i++)
+            {
+                m_descriptorSetLayouts[i] = s_uniformLayoutHandlePool.FetchResource(desc.uniformBindings.m_layouts[i].id)->m_descriptorSetLayout;
+            }
+
             vk::PipelineLayoutCreateInfo layoutCreateInfo = {};
-            layoutCreateInfo.setPSetLayouts(&m_descriptorSetLayout);
-            // TODO Multiple
-            layoutCreateInfo.setSetLayoutCount(1);
+            layoutCreateInfo.setPSetLayouts(m_descriptorSetLayouts.data());
+            layoutCreateInfo.setSetLayoutCount(m_descriptorSetLayouts.size());
 
             auto createPipelineLayoutResult = s_device.createPipelineLayout(layoutCreateInfo);
             VK_ASSERT(createPipelineLayoutResult);
@@ -437,25 +456,12 @@ namespace GFX
             auto createGraphicsPipelineResult = s_device.createGraphicsPipeline(nullptr, pipelineCreateInfo);
             VK_ASSERT(createGraphicsPipelineResult);
             m_pipeline = createGraphicsPipelineResult.value;
-
-            /*
-            Descriptor Sets
-            */
-            std::vector<vk::DescriptorSetLayout> descriptorSetLayouts(s_swapChainImages.size(), m_descriptorSetLayout);
-            vk::DescriptorSetAllocateInfo descriptorSetAllocateInfo = {};
-            descriptorSetAllocateInfo.setDescriptorPool(s_descriptorPoolDefault);
-            descriptorSetAllocateInfo.setDescriptorSetCount(s_swapChainImages.size());
-            descriptorSetAllocateInfo.setPSetLayouts(descriptorSetLayouts.data());
-
-            auto allocateDescriptorSetsResult = s_device.allocateDescriptorSets(descriptorSetAllocateInfo);
-            m_descriptorSets = allocateDescriptorSetsResult.value;
         }
 
         ~PipelineResource()
         {
             s_device.waitIdle();
 
-            s_device.destroyDescriptorSetLayout(m_descriptorSetLayout);
             s_device.destroyPipelineLayout(m_pipelineLayout);
             s_device.destroyPipeline(m_pipeline);
         }
@@ -522,8 +528,7 @@ namespace GFX
         uint32_t handle = 0;
         vk::Pipeline m_pipeline = nullptr;
         vk::PipelineLayout m_pipelineLayout = nullptr;
-        vk::DescriptorSetLayout m_descriptorSetLayout = nullptr;
-        std::vector<vk::DescriptorSet> m_descriptorSets;
+        std::vector<vk::DescriptorSetLayout> m_descriptorSetLayouts;
     };
 
     struct BufferResource
@@ -568,31 +573,6 @@ namespace GFX
             s_device.waitIdle();
             s_device.destroyBuffer(m_buffer);
             s_device.freeMemory(m_deviceMemory);
-        }
-
-        void LazyCreateDescriptorSets(PipelineResource* pipeline)
-        {
-            if (m_descriptorSets.size() != 0)
-            {
-                return;
-            }
-
-            size_t setCount = 1;
-
-            if (m_storageMode == BufferStorageMode::Dynamic)
-            {
-                setCount = s_swapChainImages.size();
-            }
-
-            std::vector<vk::DescriptorSetLayout> descriptorSetLayouts(setCount, pipeline->m_descriptorSetLayout);
-
-            vk::DescriptorSetAllocateInfo descriptorSetAllocateInfo = {};
-            descriptorSetAllocateInfo.setDescriptorPool(s_descriptorPoolDefault);
-            descriptorSetAllocateInfo.setDescriptorSetCount(setCount);
-            descriptorSetAllocateInfo.setPSetLayouts(descriptorSetLayouts.data());
-
-            auto allocateDescriptorSetsResult = s_device.allocateDescriptorSets(descriptorSetAllocateInfo);
-            m_descriptorSets = allocateDescriptorSetsResult.value;
         }
 
         void CreateVulkanBuffer(size_t size, vk::BufferUsageFlags usage, vk::MemoryPropertyFlags properties, vk::Buffer& buffer, vk::DeviceMemory& bufferMemory)
@@ -732,6 +712,71 @@ namespace GFX
         vk::DeviceMemory m_stagingDeviceMemory = nullptr;
         BufferStorageMode m_storageMode = BufferStorageMode::Dynamic;
         BufferUsage m_usage;
+    };
+
+    struct UniformResource
+    {
+        UniformResource(const UniformDescription& desc)
+        {
+            m_layout = desc.m_layout;
+            m_storageMode = desc.m_storageMode;
+
+            auto descriptorSetCount = desc.m_storageMode == UniformStorageMode::Dynamic ? s_swapChainImages.size() : 1;
+
+            // Create Descriptor Sets
+            vk::DescriptorSetAllocateInfo descriptorSetAllocateInfo = {};
+            descriptorSetAllocateInfo.setDescriptorPool(s_descriptorPoolDefault);
+            descriptorSetAllocateInfo.setDescriptorSetCount(descriptorSetCount);
+            UniformLayoutResource* uniformLayoutResource = s_uniformLayoutHandlePool.FetchResource(desc.m_layout.id);
+
+            std::vector<vk::DescriptorSetLayout> layouts(descriptorSetCount, uniformLayoutResource->m_descriptorSetLayout);
+            descriptorSetAllocateInfo.setPSetLayouts(layouts.data());
+
+            auto allocateDescriptorSetsResult = s_device.allocateDescriptorSets(descriptorSetAllocateInfo);
+            VK_ASSERT(allocateDescriptorSetsResult);
+            m_descriptorSets = allocateDescriptorSetsResult.value;
+
+            for (size_t i = 0; i < descriptorSetCount; i++)
+            {
+                for (size_t j = 0; j < desc.m_atrributes.size(); j++)
+                {
+                    s_device.waitIdle();
+
+                    auto attribute = desc.m_atrributes[j];
+                    BufferResource* bufferResource = s_bufferHandlePool.FetchResource(attribute.buffer.id);
+
+                    if (i == 0)
+                    {
+                        m_atrributes[attribute.binding] = attribute;
+                    }
+
+                    vk::DescriptorBufferInfo bufferInfo = {};
+                    bufferInfo.setBuffer(bufferResource->m_buffer);
+                    bufferInfo.setOffset(attribute.offset + (bufferResource->m_size * i));
+                    bufferInfo.setRange(attribute.range);
+
+                    vk::WriteDescriptorSet writeDescriptorSet = {};
+                    writeDescriptorSet.setDescriptorCount(1);
+                    writeDescriptorSet.setPBufferInfo(&bufferInfo);
+                    writeDescriptorSet.setDstBinding(attribute.binding);
+                    writeDescriptorSet.setDstArrayElement(0);
+                    writeDescriptorSet.setDstSet(m_descriptorSets[i]);
+                    writeDescriptorSet.setDescriptorType(vk::DescriptorType::eUniformBuffer);
+
+                    s_device.updateDescriptorSets(writeDescriptorSet, nullptr);
+                }
+            }
+        }
+
+        ~UniformResource()
+        {
+        }
+
+        uint32_t handle = 0;
+
+        UniformLayout m_layout;
+        UniformStorageMode m_storageMode;
+        std::map<uint32_t, UniformAtrribute> m_atrributes;
 
         std::vector<vk::DescriptorSet> m_descriptorSets;
     };
@@ -792,6 +837,30 @@ namespace GFX
         return result;
     }
 
+    UniformLayout CreateUniformLayout(const UniformLayoutDescription& desc)
+    {
+        UniformLayout result = UniformLayout();
+
+        UniformLayoutResource* uniformLayoutResource = new UniformLayoutResource(desc);
+        result.id = s_uniformLayoutHandlePool.AllocateHandle(uniformLayoutResource);
+
+        uniformLayoutResource->handle = result.id;
+
+        return result;
+    }
+
+    Uniform CreateUniform(const UniformDescription& desc)
+    {
+        Uniform result = Uniform();
+
+        UniformResource* uniformResource = new UniformResource(desc);
+        result.id = s_uniformHandlePool.AllocateHandle(uniformResource);
+
+        uniformResource->handle = result.id;
+
+        return result;
+    }
+
     void DestroyShader(const Shader& shader)
     {
         s_shaderHandlePool.FreeHandle(shader.id);
@@ -811,6 +880,17 @@ namespace GFX
     {
         s_bufferHandlePool.FreeHandle(buffer.id);
     }
+
+    void DestroyUniformLayout(const UniformLayout& uniformLayout)
+    {
+        s_uniformLayoutHandlePool.FreeHandle(uniformLayout.id);
+    }
+
+    void DestroyUniform(const Uniform& uniform)
+    {
+        s_uniformHandlePool.FreeHandle(uniform.id);
+    }
+
     /*
     Buffer Operation
     */
@@ -848,70 +928,24 @@ namespace GFX
         bufferResource->Update(offset, size, data);
     }
 
-    void UpdateUniform(Pipeline pipeline, uint32_t binding, Buffer buffer, size_t offset, size_t range)
+    void BindUniform(Uniform uniform, uint32_t set)
     {
-        PipelineResource* pipelineResource = s_pipelineHandlePool.FetchResource(pipeline.id);
-        BufferResource* bufferResource = s_bufferHandlePool.FetchResource(buffer.id);
-        
-        s_device.waitIdle();
-
-        bufferResource->LazyCreateDescriptorSets(pipelineResource);
-
-        if (bufferResource->m_storageMode == BufferStorageMode::Dynamic)
+        UniformResource* uniformResource = s_uniformHandlePool.FetchResource(uniform.id);
+        if (uniformResource->m_storageMode == UniformStorageMode::Dynamic)
         {
-            for (size_t i = 0; i < s_swapChainImages.size(); i++)
-            {
-                vk::DescriptorBufferInfo bufferInfo = {};
-                bufferInfo.setBuffer(bufferResource->m_buffer);
-                bufferInfo.setOffset(offset + (bufferResource->m_size * i));
-                assert((offset + (bufferResource->m_size * i)) % s_physicalDeviceProperties.limits.minUniformBufferOffsetAlignment == 0);
-                bufferInfo.setRange(range);
-
-                vk::WriteDescriptorSet writeDescriptorSet = {};
-                writeDescriptorSet.setDescriptorCount(1);
-                writeDescriptorSet.setPBufferInfo(&bufferInfo);
-                writeDescriptorSet.setDstBinding(binding);
-                writeDescriptorSet.setDstArrayElement(0);
-                writeDescriptorSet.setDstSet(bufferResource->m_descriptorSets[i]);
-                writeDescriptorSet.setDescriptorType(vk::DescriptorType::eUniformBuffer);
-
-                s_device.updateDescriptorSets(writeDescriptorSet, nullptr);
-            }
-
-            // s_commandBuffersDefault[s_currentImageIndex].bindDescriptorSets(vk::PipelineBindPoint::eGraphics, s_currentPipleline->m_pipelineLayout, 0, bufferResource->m_descriptorSets[s_currentImageIndex], nullptr);
+            s_currentDescriptors[set] = uniformResource->m_descriptorSets[s_currentImageIndex];
         }
         else
         {
-            vk::DescriptorBufferInfo bufferInfo = {};
-            bufferInfo.setBuffer(bufferResource->m_buffer);
-            bufferInfo.setOffset(offset);
-            bufferInfo.setRange(range);
-
-            vk::WriteDescriptorSet writeDescriptorSet = {};
-            writeDescriptorSet.setDescriptorCount(1);
-            writeDescriptorSet.setPBufferInfo(&bufferInfo);
-            writeDescriptorSet.setDstBinding(binding);
-            writeDescriptorSet.setDstArrayElement(0);
-            writeDescriptorSet.setDstSet(bufferResource->m_descriptorSets[0]);
-            writeDescriptorSet.setDescriptorType(vk::DescriptorType::eUniformBuffer);
-
-            s_device.updateDescriptorSets(writeDescriptorSet, nullptr);
-
-            // s_commandBuffersDefault[s_currentImageIndex].bindDescriptorSets(vk::PipelineBindPoint::eGraphics, s_currentPipleline->m_pipelineLayout, 0, bufferResource->m_descriptorSets[0], nullptr);
+            s_currentDescriptors[set] = uniformResource->m_descriptorSets[0];
         }
     }
 
-    void BindUniform(uint32_t set, Buffer buffer)
+    void UpdateUniformBuffer(Uniform uniform, uint32_t binding, void* data)
     {
-        BufferResource* bufferResource = s_bufferHandlePool.FetchResource(buffer.id);
-        if (bufferResource->m_storageMode == BufferStorageMode::Dynamic)
-        {
-            s_currentDescriptors[set] = bufferResource->m_descriptorSets[s_currentImageIndex];
-        }
-        else
-        {
-            s_currentDescriptors[set] = bufferResource->m_descriptorSets[0];
-        }
+        UniformResource* uniformResource = s_uniformHandlePool.FetchResource(uniform.id);
+        auto attribute = uniformResource->m_atrributes[binding];
+        GFX::UpdateBuffer(attribute.buffer, attribute.offset, attribute.range, data);
     }
 
     /*
