@@ -21,6 +21,8 @@ namespace GFX
     struct BufferResource;
     struct UniformLayoutResource;
     struct UniformResource;
+    struct ImageResource;
+
     /*
     ===================================================Static Global Variables====================================================
     */
@@ -34,6 +36,7 @@ namespace GFX
     static HandlePool<BufferResource> s_bufferHandlePool = HandlePool<BufferResource>(512);
     static HandlePool<UniformLayoutResource> s_uniformLayoutHandlePool = HandlePool<UniformLayoutResource>(128);
     static HandlePool<UniformResource> s_uniformHandlePool = HandlePool<UniformResource>(256);
+    static HandlePool<ImageResource> s_imageHandlePool = HandlePool<ImageResource>(256);
 
     /*
     Device Instance
@@ -714,6 +717,32 @@ namespace GFX
         BufferUsage m_usage;
     };
 
+    struct ImageResource
+    {
+        ImageResource(const ImageDescription& desc)
+        {
+            vk::ImageCreateInfo imageCreateInfo = {};
+
+            auto createImageResult = s_device.createImage(imageCreateInfo);
+            VK_ASSERT(createImageResult);
+            m_image = createImageResult.value;
+        }
+
+        ~ImageResource()
+        {
+            if (m_allocated)
+            {
+                s_device.freeMemory(m_deviceMemory);
+            }
+            s_device.destroyImage(m_image);
+        }
+
+        uint32_t handle = 0;
+        bool m_allocated = false;
+        vk::DeviceMemory m_deviceMemory = nullptr;
+        vk::Image m_image = nullptr;
+    };
+
     struct UniformResource
     {
         UniformResource(const UniformDescription& desc)
@@ -770,6 +799,8 @@ namespace GFX
 
         ~UniformResource()
         {
+            s_device.waitIdle();
+            s_device.freeDescriptorSets(s_descriptorPoolDefault, m_descriptorSets.size(), m_descriptorSets.data());
         }
 
         uint32_t handle = 0;
@@ -837,6 +868,18 @@ namespace GFX
         return result;
     }
 
+    Image CreateImage(const ImageDescription& desc)
+    {
+        Image result = Image();
+
+        ImageResource* imageResource = new ImageResource(desc);
+        result.id = s_imageHandlePool.AllocateHandle(imageResource);
+
+        imageResource->handle = result.id;
+
+        return result;
+    }
+
     UniformLayout CreateUniformLayout(const UniformLayoutDescription& desc)
     {
         UniformLayout result = UniformLayout();
@@ -879,6 +922,11 @@ namespace GFX
     void DestroyBuffer(const Buffer& buffer)
     {
         s_bufferHandlePool.FreeHandle(buffer.id);
+    }
+
+    void DestroyImage(const Image& image)
+    {
+        s_imageHandlePool.FreeHandle(image.id);
     }
 
     void DestroyUniformLayout(const UniformLayout& uniformLayout)
@@ -1497,13 +1545,19 @@ namespace GFX
         uniformmBufferPoolSize.setType(vk::DescriptorType::eUniformBuffer);
         uniformmBufferPoolSize.setDescriptorCount(500);
 
+        vk::DescriptorPoolSize texturePoolSize = {};
+        texturePoolSize.setType(vk::DescriptorType::eSampledImage);
+        texturePoolSize.setDescriptorCount(200);
+
         std::vector<vk::DescriptorPoolSize> sizes;
         sizes.push_back(uniformmBufferPoolSize);
+        sizes.push_back(texturePoolSize);
 
         vk::DescriptorPoolCreateInfo poolCreateInfo = {};
         poolCreateInfo.setPoolSizeCount(sizes.size());
         poolCreateInfo.setPPoolSizes(sizes.data());
         poolCreateInfo.setMaxSets(1000);
+        poolCreateInfo.setFlags(vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet);
 
         auto createDescriptorPoolResult = s_device.createDescriptorPool(poolCreateInfo);
         VK_ASSERT(createDescriptorPoolResult);

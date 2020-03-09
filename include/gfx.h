@@ -111,6 +111,36 @@ namespace GFX
         uint32_t id = 0;
     };
 
+    enum class ImageType
+    {
+        Image2D,
+    };
+
+    enum class ImageUsage
+    {
+        SampledImage,
+        AttachmentImage
+    };
+
+    enum class ImageSampleCount
+    {
+        Sample1,
+        Sample2,
+        Sample4
+    };
+
+    struct ImageDescription
+    {
+        uint32_t width;
+        uint32_t height;
+        uint32_t depth = 1;
+        ImageType type;
+        ImageUsage usage;
+        Format format;
+        ImageSampleCount sampleCount = ImageSampleCount::Sample1;
+        bool optimizeForShaderAccess = true;
+    };
+
     struct Image
     {
         uint32_t id = 0;
@@ -343,6 +373,7 @@ namespace GFX
     Shader CreateShader(const ShaderDescription& desc);
     RenderPass CreateRenderPass(const RenderPassDescription& desc);
     Buffer CreateBuffer(const BufferDescription& desc);
+    Image CreateImage(const ImageDescription& desc);
     UniformLayout CreateUniformLayout(const UniformLayoutDescription& desc);
     Uniform CreateUniform(const UniformDescription& desc);
     
@@ -350,6 +381,7 @@ namespace GFX
     void DestroyPipeline(const Pipeline& pipeline);
     void DestroyRenderPass(const RenderPass& renderPass);
     void DestroyBuffer(const Buffer& buffer);
+    void DestroyImage(const Image& image);
     void DestroyUniformLayout(const UniformLayout& uniformLayout);
     void DestroyUniform(const Uniform& uniform);
 
