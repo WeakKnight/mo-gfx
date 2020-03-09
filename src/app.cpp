@@ -95,7 +95,7 @@ void App::Init()
 	GFX::UpdateBuffer(indexBuffer, 0, indexBufferDescription.size, (void*)indices.data());
 
 	GFX::BufferDescription uniformBufferDescription = {};
-	uniformBufferDescription.size = GFX::AlignmentSize(sizeof(UniformBufferObject), GFX::GetMinimumUniformBufferAlignment()) + GFX::AlignmentSize(sizeof(float), GFX::GetMinimumUniformBufferAlignment());
+	uniformBufferDescription.size = GFX::UniformAlign(sizeof(UniformBufferObject)) + GFX::UniformAlign(sizeof(float));
 	uniformBufferDescription.storageMode = GFX::BufferStorageMode::Dynamic;
 	uniformBufferDescription.usage = GFX::BufferUsage::UniformBuffer;
 
@@ -146,9 +146,8 @@ void App::Init()
 	uniformDesc.AddBufferAttribute(
 		1,
 		uniformBuffer,
-		GFX::AlignmentSize(
-			sizeof(UniformBufferObject),
-			GFX::GetMinimumUniformBufferAlignment()),
+		GFX::UniformAlign(
+			sizeof(UniformBufferObject)),
 		sizeof(float)
 	);
 
@@ -178,11 +177,10 @@ void App::MainLoop()
 
 			GFX::BindIndexBuffer(indexBuffer, 0, GFX::IndexType::UInt16);
 			GFX::BindVertexBuffer(vertexBuffer, 0);
-			
+			GFX::BindUniform(uniform, 0);
+
 			GFX::SetViewport(0, 0, s_width, s_height);
 			GFX::SetScissor(0, 0, s_width, s_height);
-
-			GFX::BindUniform(uniform, 0);
 
 			GFX::DrawIndexed(indices.size(), 1, 0);
 

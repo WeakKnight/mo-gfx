@@ -922,6 +922,11 @@ namespace GFX
         return size + (size % alignment);
     }
 
+    size_t UniformAlign(size_t size)
+    {
+        return AlignmentSize(size, s_physicalDeviceProperties.limits.minUniformBufferOffsetAlignment);
+    }
+
     void UpdateBuffer(Buffer buffer, size_t offset, size_t size, void* data)
     {
         BufferResource* bufferResource = s_bufferHandlePool.FetchResource(buffer.id);
@@ -1145,11 +1150,6 @@ namespace GFX
         CreateCommandBuffersDefault();
         CreateSyncObjects();
         CreateDescriptorPoolDefault();
-    }
-
-    void Submit()
-    {
-
     }
 
     bool BeginFrame()

@@ -360,6 +360,7 @@ namespace GFX
     size_t GetMinimumUniformBufferAlignment();
 
     size_t AlignmentSize(size_t size, size_t alignment);
+    size_t UniformAlign(size_t size);
 
     void UpdateBuffer(Buffer buffer, size_t offset, size_t size, void* data);
 
@@ -381,12 +382,8 @@ namespace GFX
     void DrawIndexed(uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, uint32_t vertexOffset = 0, uint32_t firstInstance = 0);
     void SetViewport(float x, float y, float w, float h);
     void SetScissor(float x, float y, float w, float h);
-    // void BeginDefaultCommandBuffer();
     void BeginDefaultRenderPass();
     void EndRenderPass();
-    // void EndCommandBuffer();
-
-    void Submit();
 
     void EndFrame();
 
