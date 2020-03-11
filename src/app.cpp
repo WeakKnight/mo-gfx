@@ -7,6 +7,9 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
+#define STB_IMAGE_IMPLEMENTATION
+#include <stb_image.h>
+
 const int WIDTH = 800;
 const int HEIGHT = 600;
 
@@ -21,6 +24,7 @@ static GFX::Buffer indexBuffer;
 static GFX::Buffer uniformBuffer;
 static GFX::UniformLayout uniformLayout;
 static GFX::Uniform uniform;
+static GFX::Image image;
 
 struct Vertex
 {
@@ -152,6 +156,25 @@ void App::Init()
 	);
 
 	uniform = GFX::CreateUniform(uniformDesc);
+
+	LoadTexture();
+}
+
+void App::LoadTexture()
+{
+	int texWidth, texHeight, texChannels;
+	stbi_uc* pixels = stbi_load("texture.jpg", &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+
+	GFX::ImageDescription imageDescription = {};
+	imageDescription.format = GFX::Format::R8G8B8A8;
+	imageDescription.width = texWidth;
+	imageDescription.height = texHeight;
+	imageDescription.optimizeForShaderAccess = true;
+	imageDescription.usage = GFX::ImageUsage::SampledImage;
+	imageDescription.type = GFX::ImageType::Image2D;
+	imageDescription.sampleCount = GFX::ImageSampleCount::Sample1;
+
+	image = GFX::CreateImage(imageDescription);
 }
 
 void App::MainLoop()
@@ -193,6 +216,8 @@ void App::MainLoop()
 
 void App::CleanUp()
 {
+	GFX::DestroyImage(image);
+
 	GFX::DestroyUniform(uniform);
 	GFX::DestroyUniformLayout(uniformLayout);
 

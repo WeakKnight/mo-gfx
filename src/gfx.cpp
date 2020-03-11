@@ -721,7 +721,35 @@ namespace GFX
     {
         ImageResource(const ImageDescription& desc)
         {
+            m_width = desc.width;
+            m_height = desc.height;
+
             vk::ImageCreateInfo imageCreateInfo = {};
+            vk::Extent3D imageExtent = {};
+            imageExtent.setWidth(desc.width);
+            imageExtent.setHeight(desc.height);
+            imageExtent.setDepth(desc.depth);
+            imageCreateInfo.setExtent(imageExtent);
+            imageCreateInfo.setFormat(MapFormatForVulkan(desc.format));
+            imageCreateInfo.setImageType(MapImageTypeForVulkan(desc.type));
+            imageCreateInfo.setUsage(MapImageUsageForVulkan(desc.usage));
+            imageCreateInfo.setMipLevels(desc.mipLevels);
+
+            if (!desc.readOrWriteByCPU)
+            {
+                imageCreateInfo.setTiling(vk::ImageTiling::eOptimal);
+                imageCreateInfo.setInitialLayout(vk::ImageLayout::eUndefined);
+            }
+            else
+            {
+                imageCreateInfo.setTiling(vk::ImageTiling::eLinear);
+                imageCreateInfo.setInitialLayout(vk::ImageLayout::ePreinitialized);
+            }
+
+            imageCreateInfo.setArrayLayers(1);
+            imageCreateInfo.setSamples(MapSampleCountForVulkan(desc.sampleCount));
+            // TODO Support Ray Tracing Queue
+            imageCreateInfo.setSharingMode(vk::SharingMode::eExclusive);           
 
             auto createImageResult = s_device.createImage(imageCreateInfo);
             VK_ASSERT(createImageResult);
@@ -737,8 +765,55 @@ namespace GFX
             s_device.destroyImage(m_image);
         }
 
+        vk::SampleCountFlagBits MapSampleCountForVulkan(const ImageSampleCount& sampleCount)
+        {
+            switch (sampleCount)
+            {
+            case ImageSampleCount::Sample1:
+                return vk::SampleCountFlagBits::e1;
+            case ImageSampleCount::Sample2:
+                return vk::SampleCountFlagBits::e2;
+            case ImageSampleCount::Sample4:
+                return vk::SampleCountFlagBits::e4;
+            default:
+                assert(false);
+                return vk::SampleCountFlagBits::e1;
+            }
+        }
+
+        vk::ImageUsageFlags MapImageUsageForVulkan(const ImageUsage& imageUsage)
+        {
+            switch (imageUsage)
+            {
+            case ImageUsage::SampledImage:
+                return vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled;
+            case ImageUsage::AttachmentImage:
+                return vk::ImageUsageFlagBits::eColorAttachment;
+            default:
+                assert(false);
+                return vk::ImageUsageFlagBits::eSampled;
+            }
+        }
+
+        vk::ImageType MapImageTypeForVulkan(const ImageType& imageType)
+        {
+            switch (imageType)
+            {
+            case ImageType::Image2D:
+                return vk::ImageType::e2D;
+            default:
+                assert(false);
+                return vk::ImageType::e2D;
+            }
+        }
+
         uint32_t handle = 0;
         bool m_allocated = false;
+
+        uint32_t m_width = 0;
+        uint32_t m_height = 0;
+        uint32_t m_depth = 0;
+
         vk::DeviceMemory m_deviceMemory = nullptr;
         vk::Image m_image = nullptr;
     };

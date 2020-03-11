@@ -13,6 +13,8 @@ private:
 	void MainLoop();
 	void CleanUp();
 
+	void LoadTexture();
+
 private:
 	GLFWwindow* m_window = nullptr;
 };
