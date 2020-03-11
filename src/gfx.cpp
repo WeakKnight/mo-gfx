@@ -204,6 +204,10 @@ namespace GFX
     vk::IndexType MapIndexTypeFormatForVulkan(IndexType indexType);
     vk::ShaderStageFlagBits MapShaderStageForVulkan(const ShaderStage& stage);
     vk::DescriptorType MapUniformTypeForVulkan(const UniformType& uniformType);
+    uint32_t FindMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties);
+    void CreateVulkanBuffer(size_t size, vk::BufferUsageFlags usage, vk::MemoryPropertyFlags properties, vk::Buffer& buffer, vk::DeviceMemory& bufferMemory);
+    void TransitionImageLayout(vk::Image img, vk::Format format, vk::ImageLayout oldLayout, vk::ImageLayout newLayout);
+    void CopyBufferToImage(vk::Buffer buffer, vk::Image img, uint32_t width, uint32_t height);
 
     uint32_t HashTwoInt(uint32_t a, uint32_t b);
 
@@ -578,39 +582,6 @@ namespace GFX
             s_device.freeMemory(m_deviceMemory);
         }
 
-        void CreateVulkanBuffer(size_t size, vk::BufferUsageFlags usage, vk::MemoryPropertyFlags properties, vk::Buffer& buffer, vk::DeviceMemory& bufferMemory)
-        {
-            vk::BufferCreateInfo bufferCreateInfo = {};
-            bufferCreateInfo.setSize(size);
-            bufferCreateInfo.setUsage(usage);
-            bufferCreateInfo.setSharingMode(vk::SharingMode::eExclusive);
-
-            auto createBufferResult = s_device.createBuffer(bufferCreateInfo);
-            VK_ASSERT(createBufferResult);
-            buffer = createBufferResult.value;
-
-            vk::MemoryRequirements memRequirements = s_device.getBufferMemoryRequirements(buffer);
-
-            vk::MemoryAllocateInfo allocInfo = {};
-            allocInfo.setAllocationSize(memRequirements.size);
-            allocInfo.setMemoryTypeIndex(FindMemoryType(memRequirements.memoryTypeBits, properties));
-
-            auto allocResult = s_device.allocateMemory(allocInfo);
-            VK_ASSERT(allocResult);
-            bufferMemory = allocResult.value;
-
-            s_device.bindBufferMemory(buffer, bufferMemory, 0);
-        }
-
-        uint32_t FindMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties)
-        {
-            for (uint32_t i = 0; i < s_physicalDeviceMemoryProperties.memoryTypeCount; i++) {
-                if ((typeFilter & (1 << i)) && (s_physicalDeviceMemoryProperties.memoryTypes[i].propertyFlags & properties) == properties) {
-                    return i;
-                }
-            }
-        }
-
         vk::BufferUsageFlags MapBufferUsageForVulkan(const BufferUsage& usage)
         {
             switch (usage)
@@ -754,14 +725,31 @@ namespace GFX
             auto createImageResult = s_device.createImage(imageCreateInfo);
             VK_ASSERT(createImageResult);
             m_image = createImageResult.value;
+
+            vk::MemoryRequirements memRequirements = s_device.getImageMemoryRequirements(m_image);
+            m_memSize = memRequirements.size;
+
+            vk::MemoryAllocateInfo memAllocInfo = {};
+            memAllocInfo.setAllocationSize(memRequirements.size);
+            if (!desc.readOrWriteByCPU)
+            {
+                memAllocInfo.memoryTypeIndex = FindMemoryType(memRequirements.memoryTypeBits, vk::MemoryPropertyFlagBits::eDeviceLocal);
+            }
+            else
+            {
+                memAllocInfo.memoryTypeIndex = FindMemoryType(memRequirements.memoryTypeBits, vk::MemoryPropertyFlagBits::eHostVisible|vk::MemoryPropertyFlagBits::eHostCoherent);
+            }
+
+            auto allocateMemoryResult = s_device.allocateMemory(memAllocInfo);
+            VK_ASSERT(allocateMemoryResult);
+            m_deviceMemory = allocateMemoryResult.value;
+
+            s_device.bindImageMemory(m_image, m_deviceMemory, 0);
         }
 
         ~ImageResource()
         {
-            if (m_allocated)
-            {
-                s_device.freeMemory(m_deviceMemory);
-            }
+            s_device.freeMemory(m_deviceMemory);
             s_device.destroyImage(m_image);
         }
 
@@ -808,11 +796,12 @@ namespace GFX
         }
 
         uint32_t handle = 0;
-        bool m_allocated = false;
 
         uint32_t m_width = 0;
         uint32_t m_height = 0;
         uint32_t m_depth = 0;
+
+        uint32_t m_memSize = 0;
 
         vk::DeviceMemory m_deviceMemory = nullptr;
         vk::Image m_image = nullptr;
@@ -1054,6 +1043,24 @@ namespace GFX
     {
         BufferResource* bufferResource = s_bufferHandlePool.FetchResource(buffer.id);
         bufferResource->Update(offset, size, data);
+    }
+
+    void UpdateImageMemory(Image image, void* data)
+    {
+        ImageResource* imageResource = s_imageHandlePool.FetchResource(image.id);
+
+
+        vk::Buffer stagingBuffer;
+        vk::DeviceMemory stagingBufferDeviceMemory;
+
+        CreateVulkanBuffer(imageResource->m_memSize, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent, stagingBuffer, stagingBufferDeviceMemory);
+
+        auto mapMemoryResult = s_device.mapMemory(stagingBufferDeviceMemory, 0, imageResource->m_memSize);
+        VK_ASSERT(mapMemoryResult);
+        memcpy(mapMemoryResult.value, data, imageResource->m_memSize);
+        s_device.unmapMemory(stagingBufferDeviceMemory);
+
+
     }
 
     void BindUniform(Uniform uniform, uint32_t set)
@@ -1746,6 +1753,72 @@ namespace GFX
         case UniformType::Sampler:
             return vk::DescriptorType::eSampler;
         }
+    }
+
+    uint32_t FindMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties)
+    {
+        for (uint32_t i = 0; i < s_physicalDeviceMemoryProperties.memoryTypeCount; i++) {
+            if ((typeFilter & (1 << i)) && (s_physicalDeviceMemoryProperties.memoryTypes[i].propertyFlags & properties) == properties) {
+                return i;
+            }
+        }
+    }
+
+    void CreateVulkanBuffer(size_t size, vk::BufferUsageFlags usage, vk::MemoryPropertyFlags properties, vk::Buffer& buffer, vk::DeviceMemory& bufferMemory)
+    {
+        vk::BufferCreateInfo bufferCreateInfo = {};
+        bufferCreateInfo.setSize(size);
+        bufferCreateInfo.setUsage(usage);
+        bufferCreateInfo.setSharingMode(vk::SharingMode::eExclusive);
+
+        auto createBufferResult = s_device.createBuffer(bufferCreateInfo);
+        VK_ASSERT(createBufferResult);
+        buffer = createBufferResult.value;
+
+        vk::MemoryRequirements memRequirements = s_device.getBufferMemoryRequirements(buffer);
+
+        vk::MemoryAllocateInfo allocInfo = {};
+        allocInfo.setAllocationSize(memRequirements.size);
+        allocInfo.setMemoryTypeIndex(FindMemoryType(memRequirements.memoryTypeBits, properties));
+
+        auto allocResult = s_device.allocateMemory(allocInfo);
+        VK_ASSERT(allocResult);
+        bufferMemory = allocResult.value;
+
+        s_device.bindBufferMemory(buffer, bufferMemory, 0);
+    }
+
+    void TransitionImageLayout(vk::Image img, vk::Format format, vk::ImageLayout oldLayout, vk::ImageLayout newLayout)
+    {
+        auto cb = BeginOneTimeCommandBuffer();
+
+        vk::ImageMemoryBarrier barrier = {};
+        barrier.setOldLayout(oldLayout);
+        barrier.setNewLayout(newLayout);
+        barrier.setSrcQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED);
+        barrier.setDstQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED);
+        barrier.setImage(img);
+        
+        vk::ImageSubresourceRange subresourceRange = {};
+        subresourceRange.setBaseMipLevel(0);
+        subresourceRange.setBaseArrayLayer(0);
+        subresourceRange.setLevelCount(1);
+        subresourceRange.setLayerCount(1);
+        subresourceRange.setAspectMask(vk::ImageAspectFlagBits::eColor);
+        barrier.setSubresourceRange(subresourceRange);
+
+        barrier.setSrcAccessMask(vk::AccessFlagBits::eShaderRead); // TODO
+        barrier.setDstAccessMask(vk::AccessFlagBits::eShaderRead); // TODO
+
+        // cb.pipelineBarrier()
+
+        EndOneTimeCommandBuffer(cb);
+    }
+
+    void CopyBufferToImage(vk::Buffer buffer, vk::Image img, uint32_t width, uint32_t height)
+    {
+        auto cb = BeginOneTimeCommandBuffer();
+        EndOneTimeCommandBuffer(cb);
     }
 
     uint32_t HashTwoInt(uint32_t a, uint32_t b)

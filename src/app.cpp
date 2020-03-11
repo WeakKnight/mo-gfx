@@ -169,7 +169,8 @@ void App::LoadTexture()
 	imageDescription.format = GFX::Format::R8G8B8A8;
 	imageDescription.width = texWidth;
 	imageDescription.height = texHeight;
-	imageDescription.optimizeForShaderAccess = true;
+	imageDescription.depth = 1;
+	imageDescription.readOrWriteByCPU = false;
 	imageDescription.usage = GFX::ImageUsage::SampledImage;
 	imageDescription.type = GFX::ImageType::Image2D;
 	imageDescription.sampleCount = GFX::ImageSampleCount::Sample1;

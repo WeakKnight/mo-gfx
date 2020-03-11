@@ -139,7 +139,6 @@ namespace GFX
         ImageUsage usage;
         Format format;
         ImageSampleCount sampleCount = ImageSampleCount::Sample1;
-        bool optimizeForShaderAccess = true;
         bool readOrWriteByCPU = false;
     };
 
@@ -401,7 +400,7 @@ namespace GFX
     /*
     Image Operation
     */
-    void UpdateImageData(Image image, void* data, size_t size);
+    void UpdateImageMemory(Image image, void* data, size_t size);
     
     /*
     Uniforms
