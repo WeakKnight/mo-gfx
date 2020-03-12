@@ -147,6 +147,35 @@ namespace GFX
         uint32_t id = 0;
     };
 
+    enum class FilterMode
+    {
+        Linear,
+        Nearest
+    };
+
+    enum class WrapMode
+    {
+        Repeat,
+        MirroredRepeat,
+        ClampToEdge,
+        MirroredClampToEdge,
+        ClampToBorder,
+    };
+
+    struct SamplerDescription
+    {
+        FilterMode minFilter = FilterMode::Linear;
+        FilterMode magFilter = FilterMode::Linear;
+        WrapMode wrapU = WrapMode::ClampToEdge;
+        WrapMode wrapV = WrapMode::ClampToEdge;
+        WrapMode wrapW = WrapMode::ClampToEdge;
+    };
+
+    struct Sampler
+    {
+        uint32_t id = 0;
+    };
+
     enum class ShaderStage
     {
         Vertex,
@@ -375,6 +404,7 @@ namespace GFX
     RenderPass CreateRenderPass(const RenderPassDescription& desc);
     Buffer CreateBuffer(const BufferDescription& desc);
     Image CreateImage(const ImageDescription& desc);
+    Sampler CreateSampler(const SamplerDescription& desc);
     UniformLayout CreateUniformLayout(const UniformLayoutDescription& desc);
     Uniform CreateUniform(const UniformDescription& desc);
     
@@ -383,6 +413,7 @@ namespace GFX
     void DestroyRenderPass(const RenderPass& renderPass);
     void DestroyBuffer(const Buffer& buffer);
     void DestroyImage(const Image& image);
+    void DestroySampler(const Sampler& sampler);
     void DestroyUniformLayout(const UniformLayout& uniformLayout);
     void DestroyUniform(const Uniform& uniform);
 

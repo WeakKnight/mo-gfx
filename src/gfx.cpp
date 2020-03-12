@@ -22,6 +22,7 @@ namespace GFX
     struct UniformLayoutResource;
     struct UniformResource;
     struct ImageResource;
+    struct SamplerResource;
 
     /*
     ===================================================Static Global Variables====================================================
@@ -37,6 +38,7 @@ namespace GFX
     static HandlePool<UniformLayoutResource> s_uniformLayoutHandlePool = HandlePool<UniformLayoutResource>(128);
     static HandlePool<UniformResource> s_uniformHandlePool = HandlePool<UniformResource>(256);
     static HandlePool<ImageResource> s_imageHandlePool = HandlePool<ImageResource>(256);
+    static HandlePool<SamplerResource> s_samplerHandlePool = HandlePool<SamplerResource>(256);
 
     /*
     Device Instance
@@ -689,6 +691,26 @@ namespace GFX
         BufferUsage m_usage;
     };
 
+    struct SamplerResource
+    {
+        SamplerResource(const SamplerDescription& desc)
+        {
+            vk::SamplerCreateInfo samplerCreateInfo = {};
+            auto createSamplerResult = s_device.createSampler(samplerCreateInfo);
+            VK_ASSERT(createSamplerResult);
+
+            m_sampler = createSamplerResult.value;
+        }
+
+        ~SamplerResource()
+        {
+            s_device.destroySampler(m_sampler);
+        }
+        
+        uint32_t handle = 0;
+        vk::Sampler m_sampler;
+    };
+
     struct ImageResource
     {
         ImageResource(const ImageDescription& desc)
@@ -747,10 +769,13 @@ namespace GFX
             m_deviceMemory = allocateMemoryResult.value;
 
             s_device.bindImageMemory(m_image, m_deviceMemory, 0);
+
+            m_imageView = CreateImageView(m_image, m_format);
         }
 
         ~ImageResource()
         {
+            s_device.destroyImageView(m_imageView);
             s_device.freeMemory(m_deviceMemory);
             s_device.destroyImage(m_image);
         }
@@ -809,6 +834,7 @@ namespace GFX
 
         vk::DeviceMemory m_deviceMemory = nullptr;
         vk::Image m_image = nullptr;
+        vk::ImageView m_imageView = nullptr;
     };
 
     struct UniformResource
@@ -944,6 +970,18 @@ namespace GFX
         result.id = s_imageHandlePool.AllocateHandle(imageResource);
 
         imageResource->handle = result.id;
+
+        return result;
+    }
+
+    Sampler CreateSampler(const SamplerDescription& desc)
+    {
+        Sampler result = Sampler();
+
+        SamplerResource* samplerResource = new SamplerResource(desc);
+        result.id = s_samplerHandlePool.AllocateHandle(samplerResource);
+
+        samplerResource->handle = result.id;
 
         return result;
     }
