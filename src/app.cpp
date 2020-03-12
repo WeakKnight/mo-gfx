@@ -176,6 +176,9 @@ void App::LoadTexture()
 	imageDescription.sampleCount = GFX::ImageSampleCount::Sample1;
 
 	image = GFX::CreateImage(imageDescription);
+	GFX::UpdateImageMemory(image, pixels);
+
+	STBI_FREE(pixels);
 }
 
 void App::MainLoop()

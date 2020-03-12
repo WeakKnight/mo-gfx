@@ -400,8 +400,8 @@ namespace GFX
     /*
     Image Operation
     */
-    void UpdateImageMemory(Image image, void* data, size_t size);
-    
+    void UpdateImageMemory(Image image, void* data);
+
     /*
     Uniforms
     */

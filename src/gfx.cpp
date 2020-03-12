@@ -208,6 +208,7 @@ namespace GFX
     void CreateVulkanBuffer(size_t size, vk::BufferUsageFlags usage, vk::MemoryPropertyFlags properties, vk::Buffer& buffer, vk::DeviceMemory& bufferMemory);
     void TransitionImageLayout(vk::Image img, vk::Format format, vk::ImageLayout oldLayout, vk::ImageLayout newLayout);
     void CopyBufferToImage(vk::Buffer buffer, vk::Image img, uint32_t width, uint32_t height);
+    vk::ImageView CreateImageView(vk::Image image, vk::Format format);
 
     uint32_t HashTwoInt(uint32_t a, uint32_t b);
 
@@ -694,6 +695,7 @@ namespace GFX
         {
             m_width = desc.width;
             m_height = desc.height;
+            m_format = MapFormatForVulkan(desc.format);
 
             vk::ImageCreateInfo imageCreateInfo = {};
             vk::Extent3D imageExtent = {};
@@ -701,7 +703,7 @@ namespace GFX
             imageExtent.setHeight(desc.height);
             imageExtent.setDepth(desc.depth);
             imageCreateInfo.setExtent(imageExtent);
-            imageCreateInfo.setFormat(MapFormatForVulkan(desc.format));
+            imageCreateInfo.setFormat(m_format);
             imageCreateInfo.setImageType(MapImageTypeForVulkan(desc.type));
             imageCreateInfo.setUsage(MapImageUsageForVulkan(desc.usage));
             imageCreateInfo.setMipLevels(desc.mipLevels);
@@ -802,6 +804,8 @@ namespace GFX
         uint32_t m_depth = 0;
 
         uint32_t m_memSize = 0;
+
+        vk::Format m_format;
 
         vk::DeviceMemory m_deviceMemory = nullptr;
         vk::Image m_image = nullptr;
@@ -1060,7 +1064,12 @@ namespace GFX
         memcpy(mapMemoryResult.value, data, imageResource->m_memSize);
         s_device.unmapMemory(stagingBufferDeviceMemory);
 
+        TransitionImageLayout(imageResource->m_image, imageResource->m_format, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal);
+        CopyBufferToImage(stagingBuffer, imageResource->m_image, imageResource->m_width, imageResource->m_height);
+        TransitionImageLayout(imageResource->m_image, imageResource->m_format, vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal);
 
+        s_device.freeMemory(stagingBufferDeviceMemory);
+        s_device.destroyBuffer(stagingBuffer);
     }
 
     void BindUniform(Uniform uniform, uint32_t set)
@@ -1424,27 +1433,7 @@ namespace GFX
     {
         for (size_t i = 0; i < s_swapChainImages.size(); i++)
         {
-            vk::ImageViewCreateInfo createInfo = {};
-            createInfo.setImage(s_swapChainImages[i]);
-            createInfo.setViewType(vk::ImageViewType::e2D);
-            createInfo.setFormat(s_swapChainImageFormat);
-
-            vk::ComponentMapping componentMapping = {};
-
-            createInfo.setComponents(componentMapping);
-
-            vk::ImageSubresourceRange subResourceRange = {};
-            subResourceRange.setAspectMask(vk::ImageAspectFlagBits::eColor);
-            subResourceRange.setBaseMipLevel(0);
-            subResourceRange.setLevelCount(1);
-            subResourceRange.setBaseArrayLayer(0);
-            subResourceRange.setLayerCount(1);
-
-            createInfo.setSubresourceRange(subResourceRange);
-
-            auto createImageViewResult = s_device.createImageView(createInfo);
-            VK_ASSERT(createImageViewResult);
-            s_swapChainImageViews.push_back(createImageViewResult.value);
+            s_swapChainImageViews.push_back(CreateImageView(s_swapChainImages[i], s_swapChainImageFormat));
         }
     }
 
@@ -1807,10 +1796,31 @@ namespace GFX
         subresourceRange.setAspectMask(vk::ImageAspectFlagBits::eColor);
         barrier.setSubresourceRange(subresourceRange);
 
-        barrier.setSrcAccessMask(vk::AccessFlagBits::eShaderRead); // TODO
-        barrier.setDstAccessMask(vk::AccessFlagBits::eShaderRead); // TODO
+        vk::PipelineStageFlags sourceStage;
+        vk::PipelineStageFlags destinationStage;
 
-        // cb.pipelineBarrier()
+        if (oldLayout == vk::ImageLayout::eUndefined && newLayout == vk::ImageLayout::eTransferDstOptimal) 
+        {
+            barrier.setSrcAccessMask({});
+            barrier.setDstAccessMask(vk::AccessFlagBits::eTransferWrite);
+
+            sourceStage = vk::PipelineStageFlagBits::eTopOfPipe;
+            destinationStage = vk::PipelineStageFlagBits::eTransfer;
+        }
+        else if (oldLayout == vk::ImageLayout::eTransferDstOptimal && newLayout == vk::ImageLayout::eShaderReadOnlyOptimal) 
+        {
+            barrier.setSrcAccessMask(vk::AccessFlagBits::eTransferWrite);
+            barrier.setDstAccessMask(vk::AccessFlagBits::eShaderRead);
+
+            sourceStage = vk::PipelineStageFlagBits::eTransfer;
+            destinationStage = vk::PipelineStageFlagBits::eFragmentShader;
+        }
+        else 
+        {
+            assert(false);
+        }
+
+        cb.pipelineBarrier(sourceStage, destinationStage, {}, nullptr, nullptr, barrier);
 
         EndOneTimeCommandBuffer(cb);
     }
@@ -1818,7 +1828,46 @@ namespace GFX
     void CopyBufferToImage(vk::Buffer buffer, vk::Image img, uint32_t width, uint32_t height)
     {
         auto cb = BeginOneTimeCommandBuffer();
+
+        vk::BufferImageCopy bufferImageCopy = {};
+        bufferImageCopy.setBufferOffset(0);
+        bufferImageCopy.setBufferImageHeight(0);
+        bufferImageCopy.setBufferRowLength(0);
+
+        bufferImageCopy.setImageExtent({ width, height, 1 });
+        bufferImageCopy.setImageOffset({ 0, 0, 0 });
+
+        vk::ImageSubresourceLayers subresourceLayer = {};
+        subresourceLayer.setBaseArrayLayer(0);
+        subresourceLayer.setLayerCount(1);
+        subresourceLayer.setAspectMask(vk::ImageAspectFlagBits::eColor);
+        subresourceLayer.setMipLevel(0);
+        bufferImageCopy.setImageSubresource(subresourceLayer);
+
+        cb.copyBufferToImage(buffer, img, vk::ImageLayout::eTransferDstOptimal, bufferImageCopy);
+
         EndOneTimeCommandBuffer(cb);
+    }
+
+    vk::ImageView CreateImageView(vk::Image image, vk::Format format) 
+    {
+        vk::ImageViewCreateInfo viewInfo = {};
+        viewInfo.setImage(image);
+        viewInfo.setViewType(vk::ImageViewType::e2D);
+        viewInfo.setFormat(format);
+
+        vk::ImageSubresourceRange imageSubresourceRange = {};
+        imageSubresourceRange.setAspectMask(vk::ImageAspectFlagBits::eColor);
+        imageSubresourceRange.setBaseMipLevel(0);
+        imageSubresourceRange.setLevelCount(1);
+        imageSubresourceRange.setBaseArrayLayer(0);
+        imageSubresourceRange.setLayerCount(1);
+        viewInfo.setSubresourceRange(imageSubresourceRange);
+
+        auto createImageViewResult = s_device.createImageView(viewInfo);
+        VK_ASSERT(createImageViewResult);
+
+        return createImageViewResult.value;
     }
 
     uint32_t HashTwoInt(uint32_t a, uint32_t b)
