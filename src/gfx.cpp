@@ -1035,6 +1035,11 @@ namespace GFX
         s_imageHandlePool.FreeHandle(image.id);
     }
 
+    void DestroySampler(const Sampler& sampler)
+    {
+        s_samplerHandlePool.FreeHandle(sampler.id);
+    }
+
     void DestroyUniformLayout(const UniformLayout& uniformLayout)
     {
         s_uniformLayoutHandlePool.FreeHandle(uniformLayout.id);
