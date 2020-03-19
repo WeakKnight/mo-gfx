@@ -206,6 +206,10 @@ namespace GFX
     vk::IndexType MapIndexTypeFormatForVulkan(IndexType indexType);
     vk::ShaderStageFlagBits MapShaderStageForVulkan(const ShaderStage& stage);
     vk::DescriptorType MapUniformTypeForVulkan(const UniformType& uniformType);
+    vk::Filter MapFilterForVulkan(const FilterMode& filterMode);
+    vk::SamplerAddressMode MapWrapModeForVulkan(const WrapMode& wrapMode);
+    vk::BorderColor MapBorderColorForVulkan(const BorderColor& borderColor);
+
     uint32_t FindMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties);
     void CreateVulkanBuffer(size_t size, vk::BufferUsageFlags usage, vk::MemoryPropertyFlags properties, vk::Buffer& buffer, vk::DeviceMemory& bufferMemory);
     void TransitionImageLayout(vk::Image img, vk::Format format, vk::ImageLayout oldLayout, vk::ImageLayout newLayout);
@@ -1784,6 +1788,59 @@ namespace GFX
             return vk::DescriptorType::eUniformBuffer;
         case UniformType::Sampler:
             return vk::DescriptorType::eSampler;
+        }
+    }
+
+    vk::Filter MapFilterForVulkan(const FilterMode& filterMode)
+    {
+        switch (filterMode)
+        {
+        case FilterMode::Linear:
+            return vk::Filter::eLinear;
+        case FilterMode::Nearest:
+            return vk::Filter::eNearest;
+        default:
+            assert(false);
+            return vk::Filter::eCubicIMG;
+        }
+    }
+
+    vk::SamplerAddressMode MapWrapModeForVulkan(const WrapMode& wrapMode)
+    {
+        switch (wrapMode)
+        {
+        case WrapMode::Repeat:
+            return vk::SamplerAddressMode::eRepeat;
+        case WrapMode::ClampToEdge:
+            return vk::SamplerAddressMode::eClampToEdge;
+        case WrapMode::ClampToBorder:
+            return vk::SamplerAddressMode::eClampToBorder;
+        case WrapMode::MirroredClampToEdge:
+            return vk::SamplerAddressMode::eMirrorClampToEdge;
+        case WrapMode::MirroredRepeat:
+            return vk::SamplerAddressMode::eMirroredRepeat;
+        default:
+            assert(false);
+            return vk::SamplerAddressMode::eClampToBorder;
+        }
+    }
+
+    vk::BorderColor MapBorderColorForVulkan(const BorderColor& borderColor)
+    {
+        switch (borderColor)
+        {
+        case BorderColor::FloatOpaqueBlack:
+            return vk::BorderColor::eFloatOpaqueBlack;
+        case BorderColor::FloatTransparentBlack:
+            return vk::BorderColor::eFloatTransparentBlack;
+        case BorderColor::IntOpaqueBlack:
+            return vk::BorderColor::eIntOpaqueBlack;
+        case BorderColor::IntTransparentBlack:
+            return vk::BorderColor::eIntTransparentBlack;
+        case BorderColor::FloatOpaqueWhite:
+            return vk::BorderColor::eFloatOpaqueWhite;
+        case BorderColor::IntOpaqueWhite:
+            return vk::BorderColor::eIntOpaqueWhite;
         }
     }
 

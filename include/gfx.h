@@ -162,6 +162,16 @@ namespace GFX
         ClampToBorder,
     };
 
+    enum class BorderColor
+    {
+        IntOpaqueBlack,
+        IntTransparentBlack,
+        FloatOpaqueBlack,
+        FloatTransparentBlack,
+        IntOpaqueWhite,
+        FloatOpaqueWhite,
+    };
+
     struct SamplerDescription
     {
         FilterMode minFilter = FilterMode::Linear;
@@ -169,6 +179,9 @@ namespace GFX
         WrapMode wrapU = WrapMode::ClampToEdge;
         WrapMode wrapV = WrapMode::ClampToEdge;
         WrapMode wrapW = WrapMode::ClampToEdge;
+        bool anisotropyEnable = false;
+        int maxAnisotropy = 16;
+        BorderColor borderColor;
     };
 
     struct Sampler
