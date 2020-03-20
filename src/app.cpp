@@ -25,18 +25,20 @@ static GFX::Buffer uniformBuffer;
 static GFX::UniformLayout uniformLayout;
 static GFX::Uniform uniform;
 static GFX::Image image;
+static GFX::Sampler sampler;
 
 struct Vertex
 {
 	glm::vec2 pos;
 	glm::vec3 color;
+	glm::vec2 texCoord;
 };
 
 const std::vector<Vertex> vertices = {
-	{{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
-	{{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}},
-	{{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}},
-	{{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}}
+	{{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
+	{{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
+	{{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
+	{{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}}
 };
 
 const std::vector<uint16_t> indices = {
@@ -121,6 +123,7 @@ void App::Init()
 	GFX::VertexBindings vertexBindings = {};
 	vertexBindings.AddAttribute(0, offsetof(Vertex, pos), GFX::ValueType::Float32x2);
 	vertexBindings.AddAttribute(1, offsetof(Vertex, color), GFX::ValueType::Float32x3);
+	vertexBindings.AddAttribute(2, offsetof(Vertex, texCoord), GFX::ValueType::Float32x2);
 	vertexBindings.SetStrideSize(sizeof(Vertex));
 	vertexBindings.SetBindingType(GFX::BindingType::Vertex);
 	vertexBindings.SetBindingPosition(0);
@@ -128,6 +131,7 @@ void App::Init()
 	GFX::UniformLayoutDescription uniformLayoutDesc = {};
 	uniformLayoutDesc.AddUniformBinding(0, GFX::UniformType::UniformBuffer, GFX::ShaderStage::Vertex, 1);
 	uniformLayoutDesc.AddUniformBinding(1, GFX::UniformType::UniformBuffer, GFX::ShaderStage::Vertex, 1);
+	uniformLayoutDesc.AddUniformBinding(2, GFX::UniformType::Sampler, GFX::ShaderStage::Fragment, 1);
 
 	uniformLayout = GFX::CreateUniformLayout(uniformLayoutDesc);
 
@@ -143,6 +147,16 @@ void App::Init()
 
 	pipeline = GFX::CreatePipeline(pipelineDesc);
 
+	LoadTexture();
+
+	GFX::SamplerDescription samplerDesc = {};
+	samplerDesc.minFilter = GFX::FilterMode::Linear;
+	samplerDesc.magFilter = GFX::FilterMode::Linear;
+	samplerDesc.wrapU = GFX::WrapMode::ClampToEdge;
+	samplerDesc.wrapV = GFX::WrapMode::ClampToEdge;
+
+	sampler = GFX::CreateSampler(samplerDesc);
+
 	GFX::UniformDescription uniformDesc = {};
 	uniformDesc.SetUniformLayout(uniformLayout);
 	uniformDesc.SetStorageMode(GFX::UniformStorageMode::Dynamic);
@@ -154,10 +168,9 @@ void App::Init()
 			sizeof(UniformBufferObject)),
 		sizeof(float)
 	);
+	uniformDesc.AddImageAttribute(2, image, sampler);
 
 	uniform = GFX::CreateUniform(uniformDesc);
-
-	LoadTexture();
 }
 
 void App::LoadTexture()
@@ -176,7 +189,7 @@ void App::LoadTexture()
 	imageDescription.sampleCount = GFX::ImageSampleCount::Sample1;
 
 	image = GFX::CreateImage(imageDescription);
-	GFX::UpdateImageMemory(image, pixels);
+	GFX::UpdateImageMemory(image, pixels, sizeof(stbi_uc) * texWidth * texHeight * 4);
 
 	STBI_FREE(pixels);
 }
@@ -220,6 +233,7 @@ void App::MainLoop()
 
 void App::CleanUp()
 {
+	GFX::DestroySampler(sampler);
 	GFX::DestroyImage(image);
 
 	GFX::DestroyUniform(uniform);

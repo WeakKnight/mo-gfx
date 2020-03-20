@@ -700,6 +700,35 @@ namespace GFX
         SamplerResource(const SamplerDescription& desc)
         {
             vk::SamplerCreateInfo samplerCreateInfo = {};
+            samplerCreateInfo.setAddressModeU(MapWrapModeForVulkan(desc.wrapU));
+            samplerCreateInfo.setAddressModeV(MapWrapModeForVulkan(desc.wrapV));
+            samplerCreateInfo.setAddressModeW(MapWrapModeForVulkan(desc.wrapW));
+
+            samplerCreateInfo.setMagFilter(MapFilterForVulkan(desc.magFilter));
+            samplerCreateInfo.setMinFilter(MapFilterForVulkan(desc.minFilter));
+
+            if (desc.wrapU == WrapMode::ClampToBorder
+             || desc.wrapV == WrapMode::ClampToBorder
+             || desc.wrapW == WrapMode::ClampToBorder)
+            {
+                samplerCreateInfo.setBorderColor(MapBorderColorForVulkan(desc.borderColor));
+            }
+
+            if (desc.anisotropyEnable)
+            {
+                samplerCreateInfo.setAnisotropyEnable(true);
+                samplerCreateInfo.setMaxAnisotropy(desc.maxAnisotropy);
+            }
+
+            samplerCreateInfo.setUnnormalizedCoordinates(!desc.normalizedCoordinates);
+
+            samplerCreateInfo.setCompareEnable(false);
+
+            samplerCreateInfo.setMipmapMode(vk::SamplerMipmapMode::eLinear);
+            samplerCreateInfo.setMipLodBias(0.0f);
+            samplerCreateInfo.setMinLod(0.0f);
+            samplerCreateInfo.setMaxLod(0.0f);
+
             auto createSamplerResult = s_device.createSampler(samplerCreateInfo);
             VK_ASSERT(createSamplerResult);
 
@@ -708,6 +737,7 @@ namespace GFX
 
         ~SamplerResource()
         {
+            s_device.waitIdle();
             s_device.destroySampler(m_sampler);
         }
         
@@ -779,6 +809,7 @@ namespace GFX
 
         ~ImageResource()
         {
+            s_device.waitIdle();
             s_device.destroyImageView(m_imageView);
             s_device.freeMemory(m_deviceMemory);
             s_device.destroyImage(m_image);
@@ -865,11 +896,11 @@ namespace GFX
 
             for (size_t i = 0; i < descriptorSetCount; i++)
             {
-                for (size_t j = 0; j < desc.m_atrributes.size(); j++)
+                for (size_t j = 0; j < desc.m_bufferAtrributes.size(); j++)
                 {
                     s_device.waitIdle();
 
-                    auto attribute = desc.m_atrributes[j];
+                    auto attribute = desc.m_bufferAtrributes[j];
                     BufferResource* bufferResource = s_bufferHandlePool.FetchResource(attribute.buffer.id);
 
                     if (i == 0)
@@ -892,6 +923,29 @@ namespace GFX
 
                     s_device.updateDescriptorSets(writeDescriptorSet, nullptr);
                 }
+
+                for (size_t j = 0; j < desc.m_imageAttributes.size(); j++)
+                {
+                    s_device.waitIdle();
+                    auto attribute = desc.m_imageAttributes[j];
+                    ImageResource* imageResource = s_imageHandlePool.FetchResource(attribute.image.id);
+                    SamplerResource* samplerResource = s_samplerHandlePool.FetchResource(attribute.sampler.id);
+
+                    vk::DescriptorImageInfo imageInfo = {};
+                    imageInfo.setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal);
+                    imageInfo.setSampler(samplerResource->m_sampler);
+                    imageInfo.setImageView(imageResource->m_imageView);
+
+                    vk::WriteDescriptorSet writeDescriptorSet = {};
+                    writeDescriptorSet.setDescriptorCount(1);
+                    writeDescriptorSet.setPImageInfo(&imageInfo);
+                    writeDescriptorSet.setDstBinding(attribute.binding);
+                    writeDescriptorSet.setDstArrayElement(0);
+                    writeDescriptorSet.setDstSet(m_descriptorSets[i]);
+                    writeDescriptorSet.setDescriptorType(vk::DescriptorType::eCombinedImageSampler);
+
+                    s_device.updateDescriptorSets(writeDescriptorSet, nullptr);
+                }
             }
         }
 
@@ -905,7 +959,7 @@ namespace GFX
 
         UniformLayout m_layout;
         UniformStorageMode m_storageMode;
-        std::map<uint32_t, UniformAtrribute> m_atrributes;
+        std::map<uint32_t, UniformBufferAtrribute> m_atrributes;
 
         std::vector<vk::DescriptorSet> m_descriptorSets;
     };
@@ -1096,7 +1150,7 @@ namespace GFX
         bufferResource->Update(offset, size, data);
     }
 
-    void UpdateImageMemory(Image image, void* data)
+    void UpdateImageMemory(Image image, void* data, size_t size)
     {
         ImageResource* imageResource = s_imageHandlePool.FetchResource(image.id);
 
@@ -1108,7 +1162,7 @@ namespace GFX
 
         auto mapMemoryResult = s_device.mapMemory(stagingBufferDeviceMemory, 0, imageResource->m_memSize);
         VK_ASSERT(mapMemoryResult);
-        memcpy(mapMemoryResult.value, data, imageResource->m_memSize);
+        memcpy(mapMemoryResult.value, data, size);
         s_device.unmapMemory(stagingBufferDeviceMemory);
 
         TransitionImageLayout(imageResource->m_image, imageResource->m_format, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal);
@@ -1787,7 +1841,7 @@ namespace GFX
         case UniformType::UniformBuffer:
             return vk::DescriptorType::eUniformBuffer;
         case UniformType::Sampler:
-            return vk::DescriptorType::eSampler;
+            return vk::DescriptorType::eCombinedImageSampler;
         }
     }
 

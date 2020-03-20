@@ -181,7 +181,8 @@ namespace GFX
         WrapMode wrapW = WrapMode::ClampToEdge;
         bool anisotropyEnable = false;
         int maxAnisotropy = 16;
-        BorderColor borderColor;
+        BorderColor borderColor = BorderColor::FloatOpaqueBlack;
+        bool normalizedCoordinates = true;
     };
 
     struct Sampler
@@ -356,7 +357,7 @@ namespace GFX
         Static
     };
 
-    struct UniformAtrribute
+    struct UniformBufferAtrribute
     {
         uint32_t binding;
         Buffer buffer;
@@ -364,17 +365,34 @@ namespace GFX
         size_t range;
     };
 
+    struct UniformImageAttribute
+    {
+        uint32_t binding;
+        Image image;
+        Sampler sampler;
+    };
+
     struct UniformDescription
     {
         void AddBufferAttribute(uint32_t binding, Buffer buffer, size_t offset, size_t range)
         {
-            UniformAtrribute attr = {};
+            UniformBufferAtrribute attr = {};
             attr.binding = binding;
             attr.buffer = buffer;
             attr.offset = offset;
             attr.range = range;
 
-            m_atrributes.push_back(attr);
+            m_bufferAtrributes.push_back(attr);
+        }
+
+        void AddImageAttribute(uint32_t binding, Image image, Sampler sampler)
+        {
+            UniformImageAttribute attr = {};
+            attr.binding = binding;
+            attr.image = image;
+            attr.sampler = sampler;
+
+            m_imageAttributes.push_back(attr);
         }
 
         void SetUniformLayout(UniformLayout layout)
@@ -389,7 +407,8 @@ namespace GFX
 
         UniformLayout m_layout;
         UniformStorageMode m_storageMode;
-        std::vector<UniformAtrribute> m_atrributes;
+        std::vector<UniformBufferAtrribute> m_bufferAtrributes;
+        std::vector<UniformImageAttribute> m_imageAttributes;
     };
 
     struct Uniform
@@ -444,7 +463,7 @@ namespace GFX
     /*
     Image Operation
     */
-    void UpdateImageMemory(Image image, void* data);
+    void UpdateImageMemory(Image image, void* data, size_t size);
 
     /*
     Uniforms
