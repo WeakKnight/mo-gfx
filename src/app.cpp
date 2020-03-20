@@ -29,16 +29,16 @@ static GFX::Sampler sampler;
 
 struct Vertex
 {
-	glm::vec2 pos;
+	glm::vec3 pos;
 	glm::vec3 color;
 	glm::vec2 texCoord;
 };
 
 const std::vector<Vertex> vertices = {
-	{{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
-	{{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
-	{{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
-	{{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}}
+	{{-0.5f, -0.5f, 0.0f}, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f}},
+	{{0.5f, -0.5f, 0.0f}, {0.0f, 1.0f, 0.0f}, {1.0f, 0.0f}},
+	{{0.5f, 0.5f, 0.0f}, {0.0f, 0.0f, 1.0f}, {1.0f, 1.0f}},
+	{{-0.5f, 0.5f, 0.0f}, {1.0f, 1.0f, 1.0f}, {0.0f, 1.0f}}
 };
 
 const std::vector<uint16_t> indices = {
@@ -121,7 +121,7 @@ void App::Init()
 	fragShader = GFX::CreateShader(fragDesc);
 
 	GFX::VertexBindings vertexBindings = {};
-	vertexBindings.AddAttribute(0, offsetof(Vertex, pos), GFX::ValueType::Float32x2);
+	vertexBindings.AddAttribute(0, offsetof(Vertex, pos), GFX::ValueType::Float32x3);
 	vertexBindings.AddAttribute(1, offsetof(Vertex, color), GFX::ValueType::Float32x3);
 	vertexBindings.AddAttribute(2, offsetof(Vertex, texCoord), GFX::ValueType::Float32x2);
 	vertexBindings.SetStrideSize(sizeof(Vertex));
