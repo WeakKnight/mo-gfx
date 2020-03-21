@@ -65,6 +65,13 @@ namespace GFX
         bool debugMode = false;
         GLFWwindow* window = nullptr;
     };
+
+    enum class PipelineType
+    {
+        Compute,
+        Graphics,
+        RayTracing
+    };
     
     /*
     U: Unsigned S: Signed F: Float I: Int
@@ -78,6 +85,9 @@ namespace GFX
         R16G16B16F,
         R32G32B32A32F,
         R32G32B32F,
+        DEPTH_24UNORM_STENCIL_8INT,
+        DEPTH_16UNORM_STENCIL_8INT,
+        SWAPCHAIN
     };
 
     enum class BufferUsage
@@ -223,23 +233,48 @@ namespace GFX
     enum class AttachmentType
     {
         Color,
-        Stencil
+        DepthStencil,
+        Present
     };
 
-    enum class AttachmentAction
+    enum class AttachmentLoadAction
     {
         Clear,
-        Store
+        Load,
+        DontCare,
+    };
+
+    enum class AttachmentStoreAction
+    {
+        Store,
+        DontCare,
     };
 
     struct AttachmentDescription
     {
         Format format;
+        ImageSampleCount samples = ImageSampleCount::Sample1;
+        uint32_t width;
+        uint32_t height;
+        AttachmentLoadAction loadAction = AttachmentLoadAction::DontCare;
+        AttachmentLoadAction stencilLoadAction = AttachmentLoadAction::DontCare;
+        AttachmentStoreAction storeAction = AttachmentStoreAction::DontCare;
+        AttachmentStoreAction stencilStoreAction = AttachmentStoreAction::DontCare;
+        AttachmentType type;
+    };
+
+    struct SubPassDescription
+    {
+        PipelineType pipelineType;
+        std::vector<uint32_t> colorAttachments;
+        uint32_t depthStencilAttachment;
+        std::vector<uint32_t> inputAttachments;
     };
 
     struct RenderPassDescription
     {
         std::vector<AttachmentDescription> attachments;
+        std::vector<SubPassDescription> subpasses;
     };
 
     struct RenderPass

@@ -26,6 +26,7 @@ static GFX::UniformLayout uniformLayout;
 static GFX::Uniform uniform;
 static GFX::Image image;
 static GFX::Sampler sampler;
+static GFX::RenderPass renderPass;
 
 struct Vertex
 {
@@ -176,6 +177,36 @@ void App::Init()
 	uniformDesc.AddImageAttribute(2, image, sampler);
 
 	uniform = GFX::CreateUniform(uniformDesc);
+
+	// Render Pass
+	GFX::RenderPassDescription renderPassDescription = {};
+
+	GFX::AttachmentDescription swapChainAttachment = {};
+	swapChainAttachment.format = GFX::Format::SWAPCHAIN;
+	swapChainAttachment.width = s_width;
+	swapChainAttachment.height = s_height;
+	swapChainAttachment.type = GFX::AttachmentType::Present;
+	swapChainAttachment.loadAction = GFX::AttachmentLoadAction::Clear;
+	swapChainAttachment.storeAction = GFX::AttachmentStoreAction::Store;
+	
+	GFX::AttachmentDescription depthAttachment = {};
+	depthAttachment.format = GFX::Format::DEPTH_24UNORM_STENCIL_8INT;
+	depthAttachment.width = s_width;
+	depthAttachment.height = s_height;
+	depthAttachment.type = GFX::AttachmentType::DepthStencil;
+	depthAttachment.loadAction = GFX::AttachmentLoadAction::Clear;
+
+	renderPassDescription.attachments.push_back(swapChainAttachment);
+	renderPassDescription.attachments.push_back(depthAttachment);
+
+	GFX::SubPassDescription subPassSwapChain = {};
+	subPassSwapChain.pipelineType = GFX::PipelineType::Graphics;
+	subPassSwapChain.colorAttachments.push_back(0);
+	subPassSwapChain.depthStencilAttachment = 1;
+
+	renderPassDescription.subpasses.push_back(subPassSwapChain);
+
+	renderPass = GFX::CreateRenderPass(renderPassDescription);
 }
 
 void App::LoadTexture()

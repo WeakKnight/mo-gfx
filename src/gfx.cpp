@@ -174,6 +174,12 @@ namespace GFX
             return vk::Format::eR32G32B32A32Sfloat;
         case Format::R32G32B32F:
             return vk::Format::eR32G32B32Sfloat;
+        case Format::SWAPCHAIN:
+            return s_swapChainImageFormat;
+        case Format::DEPTH_16UNORM_STENCIL_8INT:
+            return vk::Format::eD16UnormS8Uint;
+        case Format::DEPTH_24UNORM_STENCIL_8INT:
+            return vk::Format::eD24UnormS8Uint;
         default:
             assert(false);
             return vk::Format::eA1R5G5B5UnormPack16;
@@ -215,6 +221,7 @@ namespace GFX
     vk::Filter MapFilterForVulkan(const FilterMode& filterMode);
     vk::SamplerAddressMode MapWrapModeForVulkan(const WrapMode& wrapMode);
     vk::BorderColor MapBorderColorForVulkan(const BorderColor& borderColor);
+    vk::SampleCountFlagBits MapSampleCountForVulkan(const ImageSampleCount& sampleCount);
 
     uint32_t FindMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties);
     vk::Format FindSupportedFormat(const std::vector<vk::Format>& candidates, vk::ImageTiling tilling, vk::FormatFeatureFlags features);
@@ -235,15 +242,71 @@ namespace GFX
 
     struct RenderPassResource
     {
-        RenderPassResource(const RenderPassDescription)
+        RenderPassResource(const RenderPassDescription& desc)
         {
-            vk::AttachmentDescription colorAttachment = {};
-            colorAttachment.setFormat(vk::Format::eR8G8B8A8Srgb);
+            std::vector<vk::AttachmentDescription> attachmentDescs = {};
+            for (const auto& attachmentDesc : desc.attachments)
+            {
+                vk::AttachmentDescription attachment = {};
+                attachment.setFormat(MapFormatForVulkan(attachmentDesc.format));
+                attachment.setSamples(MapSampleCountForVulkan(attachmentDesc.samples));
+                attachment.setLoadOp(MapLoadOpForVulkan(attachmentDesc.loadAction));
+                attachment.setStoreOp(MapStoreOpForVulkan(attachmentDesc.storeAction));
+                attachment.setStencilLoadOp(MapLoadOpForVulkan(attachmentDesc.stencilLoadAction));
+                attachment.setStencilStoreOp(MapStoreOpForVulkan(attachmentDesc.stencilStoreAction));
+                attachment.setInitialLayout(vk::ImageLayout::eUndefined);
+                
+                if (attachmentDesc.type == AttachmentType::Present)
+                {
+                    attachment.setFinalLayout(vk::ImageLayout::ePresentSrcKHR);
+                }
+                else if (attachmentDesc.type == AttachmentType::DepthStencil)
+                {
+                    attachment.setFinalLayout(vk::ImageLayout::eDepthStencilAttachmentOptimal);
+                }
+                else if (attachmentDesc.type == AttachmentType::Color)
+                {
+                    attachment.setFinalLayout(vk::ImageLayout::eColorAttachmentOptimal);
+                }
+                else
+                {
+                    assert(false);
+                }
+
+                attachmentDescs.push_back(attachment);
+            }
+
+            std::vector<vk::SubpassDescription> subpassDescs = {};
+
         }
 
         ~RenderPassResource()
         {
             s_device.destroyRenderPass(m_renderPass);
+        }
+
+        vk::AttachmentLoadOp MapLoadOpForVulkan(const AttachmentLoadAction& loadAction)
+        {
+            switch (loadAction)
+            {
+            case AttachmentLoadAction::Clear:
+                return vk::AttachmentLoadOp::eClear;
+            case AttachmentLoadAction::Load:
+                return vk::AttachmentLoadOp::eLoad;
+            case AttachmentLoadAction::DontCare:
+                return vk::AttachmentLoadOp::eDontCare;
+            }
+        }
+
+        vk::AttachmentStoreOp MapStoreOpForVulkan(const AttachmentStoreAction& storeAction)
+        {
+            switch (storeAction)
+            {
+            case AttachmentStoreAction::Store:
+                return vk::AttachmentStoreOp::eStore;
+            case AttachmentStoreAction::DontCare:
+                return vk::AttachmentStoreOp::eDontCare;
+            }
         }
 
         vk::RenderPass m_renderPass = nullptr;
@@ -829,22 +892,6 @@ namespace GFX
             s_device.destroyImageView(m_imageView);
             s_device.freeMemory(m_deviceMemory);
             s_device.destroyImage(m_image);
-        }
-
-        vk::SampleCountFlagBits MapSampleCountForVulkan(const ImageSampleCount& sampleCount)
-        {
-            switch (sampleCount)
-            {
-            case ImageSampleCount::Sample1:
-                return vk::SampleCountFlagBits::e1;
-            case ImageSampleCount::Sample2:
-                return vk::SampleCountFlagBits::e2;
-            case ImageSampleCount::Sample4:
-                return vk::SampleCountFlagBits::e4;
-            default:
-                assert(false);
-                return vk::SampleCountFlagBits::e1;
-            }
         }
 
         vk::ImageUsageFlags MapImageUsageForVulkan(const ImageUsage& imageUsage)
@@ -1624,11 +1671,14 @@ namespace GFX
         subpassDescription.setPDepthStencilAttachment(&depthAttachmentRef);
 
         vk::SubpassDependency dependency = {};
+        // From Swap Chain To Attachment
         dependency.setSrcSubpass(VK_SUBPASS_EXTERNAL);
         dependency.setDstSubpass(0);
-        dependency.setSrcStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput);
+        dependency.setSrcStageMask(vk::PipelineStageFlagBits::eBottomOfPipe);
         dependency.setDstStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput);
+        dependency.setSrcAccessMask(vk::AccessFlagBits::eMemoryRead);
         dependency.setDstAccessMask(vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite);
+        dependency.setDependencyFlags(vk::DependencyFlagBits::eByRegion);
 
         std::vector<vk::AttachmentDescription> attachments = { colorAttachment, depthAttachment };
 
@@ -1967,6 +2017,22 @@ namespace GFX
             return vk::BorderColor::eFloatOpaqueWhite;
         case BorderColor::IntOpaqueWhite:
             return vk::BorderColor::eIntOpaqueWhite;
+        }
+    }
+
+    vk::SampleCountFlagBits MapSampleCountForVulkan(const ImageSampleCount& sampleCount)
+    {
+        switch (sampleCount)
+        {
+        case ImageSampleCount::Sample1:
+            return vk::SampleCountFlagBits::e1;
+        case ImageSampleCount::Sample2:
+            return vk::SampleCountFlagBits::e2;
+        case ImageSampleCount::Sample4:
+            return vk::SampleCountFlagBits::e4;
+        default:
+            assert(false);
+            return vk::SampleCountFlagBits::e1;
         }
     }
 
