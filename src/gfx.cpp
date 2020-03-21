@@ -89,6 +89,11 @@ namespace GFX
     vk::Extent2D s_swapChainImageExtent;
     std::vector<VkImageView> s_swapChainImageViews;
 
+    // TODO RenderPass Abstraction
+    vk::Image s_depthImage;
+    vk::DeviceMemory s_depthImageMemory;
+    vk::ImageView s_depthImageView;
+
     uint32_t s_currentImageIndex = 0;
     uint32_t s_currentFrame = 0;
 
@@ -192,6 +197,7 @@ namespace GFX
     void CreateSwapChain();
     void RecreateSwapChain();
     void CreateImageViews();
+    void CreateDepthImage();
     void CreateDefaultRenderPass();
     void CreateSwapChainFramebuffers();
     void CreateCommandPoolDefault();
@@ -211,10 +217,15 @@ namespace GFX
     vk::BorderColor MapBorderColorForVulkan(const BorderColor& borderColor);
 
     uint32_t FindMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties);
+    vk::Format FindSupportedFormat(const std::vector<vk::Format>& candidates, vk::ImageTiling tilling, vk::FormatFeatureFlags features);
+    vk::Format FindDepthFormat();
+    bool HasStencilComponent(vk::Format format);
+
     void CreateVulkanBuffer(size_t size, vk::BufferUsageFlags usage, vk::MemoryPropertyFlags properties, vk::Buffer& buffer, vk::DeviceMemory& bufferMemory);
     void TransitionImageLayout(vk::Image img, vk::Format format, vk::ImageLayout oldLayout, vk::ImageLayout newLayout);
     void CopyBufferToImage(vk::Buffer buffer, vk::Image img, uint32_t width, uint32_t height);
-    vk::ImageView CreateImageView(vk::Image image, vk::Format format);
+    void CreateVulkanImage(uint32_t width, uint32_t height, vk::Format format, vk::ImageTiling tiling, vk::ImageUsageFlags usage, vk::MemoryPropertyFlags properties, vk::Image& image, vk::DeviceMemory& imageMemory);
+    vk::ImageView CreateVulkanImageView(vk::Image image, vk::Format format, vk::ImageAspectFlags aspect);
 
     uint32_t HashTwoInt(uint32_t a, uint32_t b);
 
@@ -411,6 +422,11 @@ namespace GFX
             rasterizationStateCreateInfo.setDepthBiasEnable(false);
 
             vk::PipelineDepthStencilStateCreateInfo depthStencilStateCreateInfo = {};
+            depthStencilStateCreateInfo.setDepthTestEnable(true);
+            depthStencilStateCreateInfo.setDepthWriteEnable(true);
+            depthStencilStateCreateInfo.setDepthCompareOp(vk::CompareOp::eLess);
+            depthStencilStateCreateInfo.setDepthBoundsTestEnable(false);
+            depthStencilStateCreateInfo.setStencilTestEnable(false);
 
             vk::PipelineMultisampleStateCreateInfo multisampleStateCreateInfo = {};
             multisampleStateCreateInfo.setSampleShadingEnable(false);
@@ -804,7 +820,7 @@ namespace GFX
 
             s_device.bindImageMemory(m_image, m_deviceMemory, 0);
 
-            m_imageView = CreateImageView(m_image, m_format);
+            m_imageView = CreateVulkanImageView(m_image, m_format, vk::ImageAspectFlagBits::eColor);
         }
 
         ~ImageResource()
@@ -1363,7 +1379,7 @@ namespace GFX
 
         std::vector<vk::DeviceQueueCreateInfo> queueCreateInfos = { graphicsQueueCreateInfo, presentQueueCreateInfo };
 
-        // Feature
+        // Features
         vk::PhysicalDeviceFeatures deviceFeatures = s_physicalDevice.getFeatures();
 
         // Device Create Info
@@ -1385,8 +1401,11 @@ namespace GFX
         CreateSwapChain();
         CreateImageViews();
         CreateDefaultRenderPass();
-        CreateSwapChainFramebuffers();
+     
         CreateCommandPoolDefault();
+        CreateDepthImage();
+        CreateSwapChainFramebuffers();
+
         CreateCommandBuffersDefault();
         CreateSyncObjects();
         CreateDescriptorPoolDefault();
@@ -1435,8 +1454,14 @@ namespace GFX
         colorValue.setFloat32({ 0.0f, 0.0f, 0.0f, 1.0f });
         vk::ClearValue clearColor = {};
         clearColor.setColor(colorValue);
-        renderPassBeginInfo.setClearValueCount(1);
-        renderPassBeginInfo.setPClearValues(&clearColor);
+
+        vk::ClearValue clearDepthStencil = {};
+        clearDepthStencil.setDepthStencil({ 1.0f, 0 });
+
+        std::vector<vk::ClearValue> clearValues = { clearColor, clearDepthStencil };
+
+        renderPassBeginInfo.setClearValueCount(clearValues.size());
+        renderPassBeginInfo.setPClearValues(clearValues.data());
         
         s_commandBuffersDefault[s_currentImageIndex].beginRenderPass(renderPassBeginInfo, vk::SubpassContents::eInline);
     }
@@ -1524,6 +1549,10 @@ namespace GFX
             vkDestroyImageView(s_device, imageView, nullptr);
         }
 
+        s_device.destroyImageView(s_depthImageView);
+        s_device.destroyImage(s_depthImage);
+        s_device.freeMemory(s_depthImageMemory);
+
         vkDestroySwapchainKHR(s_device, s_swapChain, nullptr);
         vkDestroySurfaceKHR(s_instance, s_surface, nullptr);
         s_device.destroy();
@@ -1534,8 +1563,29 @@ namespace GFX
     {
         for (size_t i = 0; i < s_swapChainImages.size(); i++)
         {
-            s_swapChainImageViews.push_back(CreateImageView(s_swapChainImages[i], s_swapChainImageFormat));
+            s_swapChainImageViews.push_back(CreateVulkanImageView(s_swapChainImages[i], s_swapChainImageFormat, vk::ImageAspectFlagBits::eColor));
         }
+    }
+
+    void CreateDepthImage()
+    {
+        vk::Format depthFormat = FindDepthFormat();
+        CreateVulkanImage(s_swapChainImageExtent.width, s_swapChainImageExtent.height, 
+            depthFormat, 
+            vk::ImageTiling::eOptimal, 
+            vk::ImageUsageFlagBits::eDepthStencilAttachment, 
+            vk::MemoryPropertyFlagBits::eDeviceLocal, 
+            s_depthImage, 
+            s_depthImageMemory);
+
+        vk::ImageAspectFlags targetAspect = vk::ImageAspectFlagBits::eDepth;
+        if (HasStencilComponent(depthFormat))
+        {
+            targetAspect = vk::ImageAspectFlagBits::eDepth | vk::ImageAspectFlagBits::eStencil;
+        }
+
+        s_depthImageView = CreateVulkanImageView(s_depthImage, depthFormat, targetAspect);
+        TransitionImageLayout(s_depthImage, depthFormat, vk::ImageLayout::eUndefined, vk::ImageLayout::eDepthStencilAttachmentOptimal);
     }
 
     void CreateDefaultRenderPass()
@@ -1549,14 +1599,29 @@ namespace GFX
         colorAttachment.setInitialLayout(vk::ImageLayout::eUndefined);
         colorAttachment.setFinalLayout(vk::ImageLayout::ePresentSrcKHR);
 
+        vk::AttachmentDescription depthAttachment = {};
+        depthAttachment.setFormat(FindDepthFormat());
+        depthAttachment.setSamples(vk::SampleCountFlagBits::e1);
+        depthAttachment.setLoadOp(vk::AttachmentLoadOp::eClear);
+        depthAttachment.setStoreOp(vk::AttachmentStoreOp::eDontCare);
+        depthAttachment.setStencilLoadOp(vk::AttachmentLoadOp::eDontCare);
+        depthAttachment.setStencilStoreOp(vk::AttachmentStoreOp::eDontCare);
+        depthAttachment.setInitialLayout(vk::ImageLayout::eUndefined);
+        depthAttachment.setFinalLayout(vk::ImageLayout::eDepthStencilAttachmentOptimal);
+
         vk::AttachmentReference colorAttachmentRef = {};
         colorAttachmentRef.setAttachment(0);
         colorAttachmentRef.setLayout(vk::ImageLayout::eColorAttachmentOptimal);
+
+        vk::AttachmentReference depthAttachmentRef = {};
+        depthAttachmentRef.setAttachment(1);
+        depthAttachmentRef.setLayout(vk::ImageLayout::eDepthStencilAttachmentOptimal);
 
         vk::SubpassDescription subpassDescription = {};
         subpassDescription.setPipelineBindPoint(vk::PipelineBindPoint::eGraphics);
         subpassDescription.setColorAttachmentCount(1);
         subpassDescription.setPColorAttachments(&colorAttachmentRef);
+        subpassDescription.setPDepthStencilAttachment(&depthAttachmentRef);
 
         vk::SubpassDependency dependency = {};
         dependency.setSrcSubpass(VK_SUBPASS_EXTERNAL);
@@ -1565,9 +1630,11 @@ namespace GFX
         dependency.setDstStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput);
         dependency.setDstAccessMask(vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite);
 
+        std::vector<vk::AttachmentDescription> attachments = { colorAttachment, depthAttachment };
+
         vk::RenderPassCreateInfo renderPassCreateInfo = {};
-        renderPassCreateInfo.setAttachmentCount(1);
-        renderPassCreateInfo.setPAttachments(&colorAttachment);
+        renderPassCreateInfo.setAttachmentCount(attachments.size());
+        renderPassCreateInfo.setPAttachments(attachments.data());
         renderPassCreateInfo.setSubpassCount(1);
         renderPassCreateInfo.setPSubpasses(&subpassDescription);
         renderPassCreateInfo.setDependencyCount(1);
@@ -1662,8 +1729,13 @@ namespace GFX
         s_swapChainImageViews.clear();
         s_swapChainImages.clear();
 
+        s_device.destroyImageView(s_depthImageView);
+        s_device.destroyImage(s_depthImage);
+        s_device.freeMemory(s_depthImageMemory);
+
         CreateSwapChain();
         CreateImageViews();
+        CreateDepthImage();
         CreateSwapChainFramebuffers();
     }
 
@@ -1672,13 +1744,13 @@ namespace GFX
         s_swapChainFrameBuffers.resize(s_swapChainImageViews.size());
         for (size_t i = 0; i < s_swapChainImageViews.size(); i++)
         {
-            const VkImageView* imageView = &s_swapChainImageViews[i];
+            std::vector<VkImageView> attachments = { s_swapChainImageViews[i], s_depthImageView };
 
             VkFramebufferCreateInfo framebufferInfo = {};
             framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
             framebufferInfo.renderPass = s_renderPassDefault;
-            framebufferInfo.attachmentCount = 1;
-            framebufferInfo.pAttachments = imageView;
+            framebufferInfo.attachmentCount = attachments.size();
+            framebufferInfo.pAttachments = attachments.data();
             framebufferInfo.width = s_swapChainImageExtent.width;
             framebufferInfo.height = s_swapChainImageExtent.height;
             framebufferInfo.layers = 1;
@@ -1907,6 +1979,37 @@ namespace GFX
         }
     }
 
+    vk::Format FindSupportedFormat(const std::vector<vk::Format>& candidates, vk::ImageTiling tilling, vk::FormatFeatureFlags features)
+    {
+        assert(candidates.size() > 0);
+
+        for (auto candidate : candidates)
+        {
+            vk::FormatProperties props = s_physicalDevice.getFormatProperties(candidate);
+            if (tilling == vk::ImageTiling::eLinear && (props.linearTilingFeatures & features) == features)
+            {
+                return candidate;
+            }
+            else if (tilling == vk::ImageTiling::eOptimal && (props.optimalTilingFeatures & features) == features)
+            {
+                return candidate;
+            }
+        }
+
+        assert(false);
+        return candidates[0];
+    }
+
+    vk::Format FindDepthFormat()
+    {
+        return FindSupportedFormat({ vk::Format::eD24UnormS8Uint, vk::Format::eD16UnormS8Uint, vk::Format::eD32Sfloat, vk::Format::eD32SfloatS8Uint }, vk::ImageTiling::eOptimal, vk::FormatFeatureFlagBits::eDepthStencilAttachment);
+    }
+
+    bool HasStencilComponent(vk::Format format)
+    {
+        return format == vk::Format::eD32SfloatS8Uint || format == vk::Format::eD24UnormS8Uint || format ==  vk::Format::eD16UnormS8Uint;
+    }
+
     void CreateVulkanBuffer(size_t size, vk::BufferUsageFlags usage, vk::MemoryPropertyFlags properties, vk::Buffer& buffer, vk::DeviceMemory& bufferMemory)
     {
         vk::BufferCreateInfo bufferCreateInfo = {};
@@ -1947,7 +2050,20 @@ namespace GFX
         subresourceRange.setBaseArrayLayer(0);
         subresourceRange.setLevelCount(1);
         subresourceRange.setLayerCount(1);
-        subresourceRange.setAspectMask(vk::ImageAspectFlagBits::eColor);
+        
+        if (newLayout == vk::ImageLayout::eDepthStencilAttachmentOptimal)
+        {
+            subresourceRange.setAspectMask(vk::ImageAspectFlagBits::eDepth);
+            if (HasStencilComponent(format))
+            {
+                subresourceRange.setAspectMask(vk::ImageAspectFlagBits::eDepth | vk::ImageAspectFlagBits::eStencil);
+            }
+        }
+        else
+        {
+            subresourceRange.setAspectMask(vk::ImageAspectFlagBits::eColor);
+        }
+
         barrier.setSubresourceRange(subresourceRange);
 
         vk::PipelineStageFlags sourceStage;
@@ -1968,6 +2084,14 @@ namespace GFX
 
             sourceStage = vk::PipelineStageFlagBits::eTransfer;
             destinationStage = vk::PipelineStageFlagBits::eFragmentShader;
+        }
+        else if (oldLayout == vk::ImageLayout::eUndefined && newLayout == vk::ImageLayout::eDepthStencilAttachmentOptimal)
+        {
+            barrier.setSrcAccessMask({});
+            barrier.setDstAccessMask(vk::AccessFlagBits::eDepthStencilAttachmentRead | vk::AccessFlagBits::eDepthStencilAttachmentWrite);
+
+            sourceStage = vk::PipelineStageFlagBits::eTopOfPipe;
+            destinationStage = vk::PipelineStageFlagBits::eEarlyFragmentTests;
         }
         else 
         {
@@ -2003,7 +2127,44 @@ namespace GFX
         EndOneTimeCommandBuffer(cb);
     }
 
-    vk::ImageView CreateImageView(vk::Image image, vk::Format format) 
+    void CreateVulkanImage(uint32_t width, uint32_t height, 
+        vk::Format format, 
+        vk::ImageTiling tiling, 
+        vk::ImageUsageFlags usage, 
+        vk::MemoryPropertyFlags properties, 
+        vk::Image& image, 
+        vk::DeviceMemory& imageMemory)
+    {
+        vk::ImageCreateInfo imageInfo = {};
+        imageInfo.setImageType(vk::ImageType::e2D);
+        imageInfo.setExtent({ width, height, 1});
+        imageInfo.setMipLevels(1);
+        imageInfo.setArrayLayers(1);
+        imageInfo.setFormat(format);
+        imageInfo.setTiling(tiling);
+        imageInfo.setInitialLayout(vk::ImageLayout::eUndefined);
+        imageInfo.setUsage(usage);
+        imageInfo.setSamples(vk::SampleCountFlagBits::e1);
+        imageInfo.setSharingMode(vk::SharingMode::eExclusive);
+
+        auto createImageResult = s_device.createImage(imageInfo);
+        VK_ASSERT(createImageResult);
+        image = createImageResult.value;
+
+        vk::MemoryRequirements memReq = s_device.getImageMemoryRequirements(image);
+
+        vk::MemoryAllocateInfo memAllocInfo = {};
+        memAllocInfo.setAllocationSize(memReq.size);
+        memAllocInfo.setMemoryTypeIndex(FindMemoryType(memReq.memoryTypeBits, properties));
+
+        auto allocateMemoryResult = s_device.allocateMemory(memAllocInfo);
+        VK_ASSERT(allocateMemoryResult);
+        imageMemory = allocateMemoryResult.value;
+
+        s_device.bindImageMemory(image, imageMemory, 0);
+    }
+
+    vk::ImageView CreateVulkanImageView(vk::Image image, vk::Format format, vk::ImageAspectFlags aspect) 
     {
         vk::ImageViewCreateInfo viewInfo = {};
         viewInfo.setImage(image);
@@ -2011,7 +2172,7 @@ namespace GFX
         viewInfo.setFormat(format);
 
         vk::ImageSubresourceRange imageSubresourceRange = {};
-        imageSubresourceRange.setAspectMask(vk::ImageAspectFlagBits::eColor);
+        imageSubresourceRange.setAspectMask(aspect);
         imageSubresourceRange.setBaseMipLevel(0);
         imageSubresourceRange.setLevelCount(1);
         imageSubresourceRange.setBaseArrayLayer(0);
