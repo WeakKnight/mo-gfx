@@ -277,12 +277,94 @@ namespace GFX
             }
 
             std::vector<vk::SubpassDescription> subpassDescs = {};
+            for (const auto& subpassDesc : desc.subpasses)
+            {
+                std::vector<vk::AttachmentReference> colorRefs;
+                for (auto attachmentIndex : subpassDesc.colorAttachments)
+                {
+                    vk::AttachmentReference colorRef = { attachmentIndex, vk::ImageLayout::eColorAttachmentOptimal };
+                    colorRefs.push_back(colorRef);
+                }
 
+                vk::AttachmentReference depthRef;
+                if (subpassDesc.hasDepth)
+                {
+                    depthRef = { subpassDesc.depthStencilAttachment, vk::ImageLayout::eDepthStencilAttachmentOptimal };
+                }
+
+                std::vector<vk::AttachmentReference> inputRefs;
+                for (auto inputIndex : subpassDesc.inputAttachments)
+                {
+                    vk::AttachmentReference inputRef = { inputIndex, vk::ImageLayout::eShaderReadOnlyOptimal };
+                    inputRefs.push_back(inputRef);
+                }
+
+                vk::SubpassDescription subpass = {};
+                subpass.setPipelineBindPoint(MapPipelineBindPointForVulkan(subpassDesc.pipelineType));
+                subpass.setColorAttachmentCount(colorRefs.size());
+                subpass.setPColorAttachments(colorRefs.data());
+                
+                if (subpassDesc.hasDepth)
+                {
+                    subpass.setPDepthStencilAttachment(&depthRef);
+                }
+
+                if (inputRefs.size() > 0)
+                {
+                    subpass.setInputAttachmentCount(inputRefs.size());
+                    subpass.setPInputAttachments(inputRefs.data());
+                }
+
+                subpassDescs.push_back(subpass);
+            }
+
+            // Build Dependency
+            std::vector<vk::SubpassDependency> dependencies;
+            for (const auto& dependencyDesc : desc.dependencies)
+            {
+                vk::SubpassDependency dependency = {};
+                dependency.setSrcSubpass(dependencyDesc.srcSubpass);
+                dependency.setDstSubpass(dependencyDesc.dstSubpass);
+            }
         }
 
         ~RenderPassResource()
         {
             s_device.destroyRenderPass(m_renderPass);
+        }
+
+        vk::PipelineStageFlags MapPipelineStageForVulkan(const PipelineStage& pipelineStage)
+        {
+            switch (pipelineStage)
+            {
+            case PipelineStage::ColorAttachmentOutput:
+                return vk::PipelineStageFlagBits::eColorAttachmentOutput;
+            case PipelineStage::FragmentShader:
+                return vk::PipelineStageFlagBits::eFragmentShader;
+            case PipelineStage::VertexShader:
+                return vk::PipelineStageFlagBits::eVertexShader;
+            case PipelineStage::All:
+                return vk::PipelineStageFlagBits::eAllCommands;
+            default:
+                assert(false);
+                return vk::PipelineStageFlagBits::eAllCommands;
+            }
+        }
+
+        vk::PipelineBindPoint MapPipelineBindPointForVulkan(const PipelineType& pipelineType)
+        {
+            switch (pipelineType)
+            {
+            case PipelineType::Graphics:
+                return vk::PipelineBindPoint::eGraphics;
+            case PipelineType::RayTracing:
+                return vk::PipelineBindPoint::eRayTracingNV;
+            case PipelineType::Compute:
+                return vk::PipelineBindPoint::eCompute;
+            default:
+                assert(false);
+                return vk::PipelineBindPoint::eGraphics;
+            }
         }
 
         vk::AttachmentLoadOp MapLoadOpForVulkan(const AttachmentLoadAction& loadAction)
@@ -1670,16 +1752,6 @@ namespace GFX
         subpassDescription.setPColorAttachments(&colorAttachmentRef);
         subpassDescription.setPDepthStencilAttachment(&depthAttachmentRef);
 
-        vk::SubpassDependency dependency = {};
-        // From Swap Chain To Attachment
-        dependency.setSrcSubpass(VK_SUBPASS_EXTERNAL);
-        dependency.setDstSubpass(0);
-        dependency.setSrcStageMask(vk::PipelineStageFlagBits::eBottomOfPipe);
-        dependency.setDstStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput);
-        dependency.setSrcAccessMask(vk::AccessFlagBits::eMemoryRead);
-        dependency.setDstAccessMask(vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite);
-        dependency.setDependencyFlags(vk::DependencyFlagBits::eByRegion);
-
         std::vector<vk::AttachmentDescription> attachments = { colorAttachment, depthAttachment };
 
         vk::RenderPassCreateInfo renderPassCreateInfo = {};
@@ -1687,8 +1759,6 @@ namespace GFX
         renderPassCreateInfo.setPAttachments(attachments.data());
         renderPassCreateInfo.setSubpassCount(1);
         renderPassCreateInfo.setPSubpasses(&subpassDescription);
-        renderPassCreateInfo.setDependencyCount(1);
-        renderPassCreateInfo.setPDependencies(&dependency);
         
         auto createRenderPassResult = s_device.createRenderPass(renderPassCreateInfo);
         VK_ASSERT(createRenderPassResult);

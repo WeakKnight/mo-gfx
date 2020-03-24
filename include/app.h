@@ -13,6 +13,7 @@ private:
 	void MainLoop();
 	void CleanUp();
 
+	void CreateRenderPass();
 	void LoadTexture();
 
 private:

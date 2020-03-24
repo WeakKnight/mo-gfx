@@ -177,7 +177,12 @@ void App::Init()
 	uniformDesc.AddImageAttribute(2, image, sampler);
 
 	uniform = GFX::CreateUniform(uniformDesc);
+	
+	CreateRenderPass();
+}
 
+void App::CreateRenderPass()
+{
 	// Render Pass
 	GFX::RenderPassDescription renderPassDescription = {};
 
@@ -188,7 +193,7 @@ void App::Init()
 	swapChainAttachment.type = GFX::AttachmentType::Present;
 	swapChainAttachment.loadAction = GFX::AttachmentLoadAction::Clear;
 	swapChainAttachment.storeAction = GFX::AttachmentStoreAction::Store;
-	
+
 	GFX::AttachmentDescription depthAttachment = {};
 	depthAttachment.format = GFX::Format::DEPTH_24UNORM_STENCIL_8INT;
 	depthAttachment.width = s_width;
@@ -202,7 +207,7 @@ void App::Init()
 	GFX::SubPassDescription subPassSwapChain = {};
 	subPassSwapChain.pipelineType = GFX::PipelineType::Graphics;
 	subPassSwapChain.colorAttachments.push_back(0);
-	subPassSwapChain.depthStencilAttachment = 1;
+	subPassSwapChain.SetDepthStencilAttachment(1);
 
 	renderPassDescription.subpasses.push_back(subPassSwapChain);
 

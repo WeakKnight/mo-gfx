@@ -268,13 +268,45 @@ namespace GFX
         PipelineType pipelineType;
         std::vector<uint32_t> colorAttachments;
         uint32_t depthStencilAttachment;
+        bool hasDepth = false;
         std::vector<uint32_t> inputAttachments;
+
+        void SetDepthStencilAttachment(uint32_t index)
+        {
+            depthStencilAttachment = index;
+            hasDepth = true;
+        }
+    };
+
+    enum class PipelineStage
+    {
+        ColorAttachmentOutput,
+        FragmentShader,
+        VertexShader,
+        All
+    };
+
+    enum class Access
+    {
+        ColorAttachmentWrite,
+        ShaderRead
+    };
+
+    struct DependencyDescription
+    {
+        uint32_t srcSubpass;
+        uint32_t dstSubpass;
+        PipelineStage srcStage;
+        PipelineStage dstStage;
+        Access srcAccess;
+        Access dstAccess;
     };
 
     struct RenderPassDescription
     {
         std::vector<AttachmentDescription> attachments;
         std::vector<SubPassDescription> subpasses;
+        std::vector<DependencyDescription> dependencies;
     };
 
     struct RenderPass
