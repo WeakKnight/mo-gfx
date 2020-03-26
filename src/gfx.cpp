@@ -371,6 +371,8 @@ namespace GFX
                 DestroyAttachment(pair.second);
             }
 
+            DestroyFramebuffers();
+
             s_device.destroyRenderPass(m_renderPass);
         }
 
@@ -437,11 +439,11 @@ namespace GFX
 
             if (usage & vk::ImageUsageFlagBits::eColorAttachment)
             {
-                CreateVulkanImageView(result.m_image, format, vk::ImageAspectFlagBits::eColor);
+                result.m_imageView = CreateVulkanImageView(result.m_image, format, vk::ImageAspectFlagBits::eColor);
             }
             else if (usage & vk::ImageUsageFlagBits::eDepthStencilAttachment)
             {
-                CreateVulkanImageView(result.m_image, format, vk::ImageAspectFlagBits::eDepth | vk::ImageAspectFlagBits::eStencil);
+                result.m_imageView = CreateVulkanImageView(result.m_image, format, vk::ImageAspectFlagBits::eDepth | vk::ImageAspectFlagBits::eStencil);
             }
 
             return result;
