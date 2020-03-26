@@ -210,6 +210,17 @@ void App::CreateRenderPass()
 	subPassSwapChain.SetDepthStencilAttachment(1);
 
 	renderPassDescription.subpasses.push_back(subPassSwapChain);
+	
+	renderPassDescription.width = s_width;
+	renderPassDescription.height = s_height;
+
+	/*GFX::DependencyDescription dependencyDesc = {};
+	dependencyDesc.srcSubpass = 0;
+	dependencyDesc.dstSubpass = 1;
+	dependencyDesc.srcStage = GFX::PipelineStage::ColorAttachmentOutput;
+	dependencyDesc.dstStage = GFX::PipelineStage::FragmentShader;
+	dependencyDesc.srcAccess = GFX::Access::ColorAttachmentWrite;
+	dependencyDesc.dstAccess = GFX::Access::ShaderRead;*/
 
 	renderPass = GFX::CreateRenderPass(renderPassDescription);
 }
@@ -274,6 +285,8 @@ void App::MainLoop()
 
 void App::CleanUp()
 {
+	GFX::DestroyRenderPass(renderPass);
+
 	GFX::DestroySampler(sampler);
 	GFX::DestroyImage(image);
 

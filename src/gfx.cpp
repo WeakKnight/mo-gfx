@@ -23,6 +23,7 @@ namespace GFX
     struct UniformResource;
     struct ImageResource;
     struct SamplerResource;
+    struct AttachmentResource;
 
     /*
     ===================================================Static Global Variables====================================================
@@ -239,98 +240,237 @@ namespace GFX
     /*
     ===========================================Internal Struct Definition===================================================
     */
+    struct AttachmentResource
+    {
+        bool isSwapChain = false;
+        vk::Format m_format;
+        vk::ImageUsageFlags m_usage;
+        vk::DeviceMemory m_memory;
+        vk::ImageView m_imageView;
+        vk::Image m_image;
+    };
 
     struct RenderPassResource
     {
         RenderPassResource(const RenderPassDescription& desc)
         {
-            std::vector<vk::AttachmentDescription> attachmentDescs = {};
-            for (const auto& attachmentDesc : desc.attachments)
+            m_width = desc.width;
+            m_height = desc.height;
+
+            std::vector<vk::AttachmentDescription> attachmentDescs(desc.attachments.size());
+            for (int i = 0; i < desc.attachments.size(); i++)
             {
-                vk::AttachmentDescription attachment = {};
-                attachment.setFormat(MapFormatForVulkan(attachmentDesc.format));
-                attachment.setSamples(MapSampleCountForVulkan(attachmentDesc.samples));
-                attachment.setLoadOp(MapLoadOpForVulkan(attachmentDesc.loadAction));
-                attachment.setStoreOp(MapStoreOpForVulkan(attachmentDesc.storeAction));
-                attachment.setStencilLoadOp(MapLoadOpForVulkan(attachmentDesc.stencilLoadAction));
-                attachment.setStencilStoreOp(MapStoreOpForVulkan(attachmentDesc.stencilStoreAction));
-                attachment.setInitialLayout(vk::ImageLayout::eUndefined);
+                auto& attachmentDesc = desc.attachments[i];
+                attachmentDescs[i].setFormat(MapFormatForVulkan(attachmentDesc.format));
+                attachmentDescs[i].setSamples(MapSampleCountForVulkan(attachmentDesc.samples));
+                attachmentDescs[i].setLoadOp(MapLoadOpForVulkan(attachmentDesc.loadAction));
+                attachmentDescs[i].setStoreOp(MapStoreOpForVulkan(attachmentDesc.storeAction));
+                attachmentDescs[i].setStencilLoadOp(MapLoadOpForVulkan(attachmentDesc.stencilLoadAction));
+                attachmentDescs[i].setStencilStoreOp(MapStoreOpForVulkan(attachmentDesc.stencilStoreAction));
+                attachmentDescs[i].setInitialLayout(vk::ImageLayout::eUndefined);
                 
                 if (attachmentDesc.type == AttachmentType::Present)
                 {
-                    attachment.setFinalLayout(vk::ImageLayout::ePresentSrcKHR);
+                    attachmentDescs[i].setFinalLayout(vk::ImageLayout::ePresentSrcKHR);
+                    m_attachmentDic[i] = GetSwapChainAttachment(s_currentImageIndex);
                 }
                 else if (attachmentDesc.type == AttachmentType::DepthStencil)
                 {
-                    attachment.setFinalLayout(vk::ImageLayout::eDepthStencilAttachmentOptimal);
+                    attachmentDescs[i].setFinalLayout(vk::ImageLayout::eDepthStencilAttachmentOptimal);
+                    m_attachmentDic[i] = CreateAttachment(attachmentDesc.width, attachmentDesc.height, MapFormatForVulkan(attachmentDesc.format), vk::ImageUsageFlagBits::eDepthStencilAttachment);
                 }
                 else if (attachmentDesc.type == AttachmentType::Color)
                 {
-                    attachment.setFinalLayout(vk::ImageLayout::eColorAttachmentOptimal);
+                    attachmentDescs[i].setFinalLayout(vk::ImageLayout::eColorAttachmentOptimal);
+                    m_attachmentDic[i] = CreateAttachment(attachmentDesc.width, attachmentDesc.height, MapFormatForVulkan(attachmentDesc.format), vk::ImageUsageFlagBits::eColorAttachment);
                 }
                 else
                 {
                     assert(false);
                 }
-
-                attachmentDescs.push_back(attachment);
             }
 
-            std::vector<vk::SubpassDescription> subpassDescs = {};
-            for (const auto& subpassDesc : desc.subpasses)
+            std::vector<vk::SubpassDescription> subpassDescs(desc.subpasses.size());
+
+            std::vector<std::vector<vk::AttachmentReference>> colorRefsVector(desc.subpasses.size());
+            std::vector <vk::AttachmentReference> depthRefVector(desc.subpasses.size());
+            std::vector <std::vector<vk::AttachmentReference>> inputRefsVector(desc.subpasses.size());
+
+            for(int i = 0; i < desc.subpasses.size(); i++)
             {
-                std::vector<vk::AttachmentReference> colorRefs;
+                auto& subpassDesc = desc.subpasses[i];
+
                 for (auto attachmentIndex : subpassDesc.colorAttachments)
                 {
                     vk::AttachmentReference colorRef = { attachmentIndex, vk::ImageLayout::eColorAttachmentOptimal };
-                    colorRefs.push_back(colorRef);
+                    colorRefsVector[i].push_back(colorRef);
                 }
 
-                vk::AttachmentReference depthRef;
                 if (subpassDesc.hasDepth)
                 {
-                    depthRef = { subpassDesc.depthStencilAttachment, vk::ImageLayout::eDepthStencilAttachmentOptimal };
+                    depthRefVector[i] = { subpassDesc.depthStencilAttachment, vk::ImageLayout::eDepthStencilAttachmentOptimal };
                 }
 
-                std::vector<vk::AttachmentReference> inputRefs;
                 for (auto inputIndex : subpassDesc.inputAttachments)
                 {
                     vk::AttachmentReference inputRef = { inputIndex, vk::ImageLayout::eShaderReadOnlyOptimal };
-                    inputRefs.push_back(inputRef);
+                    inputRefsVector[i].push_back(inputRef);
                 }
 
-                vk::SubpassDescription subpass = {};
-                subpass.setPipelineBindPoint(MapPipelineBindPointForVulkan(subpassDesc.pipelineType));
-                subpass.setColorAttachmentCount(colorRefs.size());
-                subpass.setPColorAttachments(colorRefs.data());
+                subpassDescs[i].setPipelineBindPoint(MapPipelineBindPointForVulkan(subpassDesc.pipelineType));
+                subpassDescs[i].setColorAttachmentCount(colorRefsVector[i].size());
+                subpassDescs[i].setPColorAttachments(colorRefsVector[i].data());
                 
                 if (subpassDesc.hasDepth)
                 {
-                    subpass.setPDepthStencilAttachment(&depthRef);
+                    subpassDescs[i].setPDepthStencilAttachment(&depthRefVector[i]);
                 }
 
-                if (inputRefs.size() > 0)
+                if (subpassDesc.inputAttachments.size() > 0)
                 {
-                    subpass.setInputAttachmentCount(inputRefs.size());
-                    subpass.setPInputAttachments(inputRefs.data());
+                    subpassDescs[i].setInputAttachmentCount(inputRefsVector[i].size());
+                    subpassDescs[i].setPInputAttachments(inputRefsVector[i].data());
                 }
-
-                subpassDescs.push_back(subpass);
             }
 
             // Build Dependency
-            std::vector<vk::SubpassDependency> dependencies;
-            for (const auto& dependencyDesc : desc.dependencies)
+            std::vector<vk::SubpassDependency> dependencies(desc.dependencies.size());
+            for (int i = 0; i < desc.dependencies.size(); i++)
             {
-                vk::SubpassDependency dependency = {};
-                dependency.setSrcSubpass(dependencyDesc.srcSubpass);
-                dependency.setDstSubpass(dependencyDesc.dstSubpass);
+                auto& dependencyDesc = desc.dependencies[i];
+
+                dependencies[i].setSrcSubpass(dependencyDesc.srcSubpass);
+                dependencies[i].setDstSubpass(dependencyDesc.dstSubpass);
+                dependencies[i].setSrcStageMask(MapPipelineStageForVulkan(dependencyDesc.srcStage));
+                dependencies[i].setDstStageMask(MapPipelineStageForVulkan(dependencyDesc.dstStage));
+                dependencies[i].setSrcAccessMask(MapAcessForVulkan(dependencyDesc.srcAccess));
+                dependencies[i].setDstAccessMask(MapAcessForVulkan(dependencyDesc.dstAccess));
+
+                dependencies[i].setDependencyFlags(vk::DependencyFlagBits::eByRegion);
             }
+
+            vk::RenderPassCreateInfo renderPassCreateInfo = {};
+            renderPassCreateInfo.setAttachmentCount(attachmentDescs.size());
+            renderPassCreateInfo.setPAttachments(attachmentDescs.data());
+            renderPassCreateInfo.setSubpassCount(subpassDescs.size());
+            renderPassCreateInfo.setPSubpasses(subpassDescs.data());
+            renderPassCreateInfo.setDependencyCount(dependencies.size());
+            renderPassCreateInfo.setPDependencies(dependencies.data());
+
+            auto createRenderPassResult = s_device.createRenderPass(renderPassCreateInfo);
+            VK_ASSERT(createRenderPassResult);
+            m_renderPass = createRenderPassResult.value;
+
+            CreateFramebuffers(desc);
         }
 
         ~RenderPassResource()
         {
+            for (auto pair : m_attachmentDic)
+            {
+                DestroyAttachment(pair.second);
+            }
+
             s_device.destroyRenderPass(m_renderPass);
+        }
+
+        void CreateFramebuffers(const RenderPassDescription& desc)
+        {
+            m_framebuffers.resize(s_swapChainImages.size());
+
+            for (int i = 0; i < s_swapChainImages.size(); i++)
+            {
+                std::vector<vk::ImageView> imageViews;
+                for (int j = 0; j < desc.attachments.size(); j++)
+                {
+                    if (m_attachmentDic[j].isSwapChain)
+                    {
+                        imageViews.push_back(s_swapChainImageViews[i]);
+                    }
+                    else
+                    {
+                        imageViews.push_back(m_attachmentDic[j].m_imageView);
+                    }
+                }
+
+                vk::FramebufferCreateInfo frameBufferCreateInfo = {};
+                frameBufferCreateInfo.setRenderPass(m_renderPass);
+                frameBufferCreateInfo.setAttachmentCount(imageViews.size());
+                frameBufferCreateInfo.setPAttachments(imageViews.data());
+                frameBufferCreateInfo.setWidth(m_width);
+                frameBufferCreateInfo.setHeight(m_height);
+                frameBufferCreateInfo.setLayers(1);
+                frameBufferCreateInfo.setAttachmentCount(desc.attachments.size());
+
+                auto createFramebufferResult = s_device.createFramebuffer(frameBufferCreateInfo);
+                VK_ASSERT(createFramebufferResult);
+                m_framebuffers[i] = createFramebufferResult.value;
+            }          
+        }
+
+        void DestroyFramebuffers()
+        {
+            for (int i = 0; i < s_swapChainImages.size(); i++)
+            {
+                s_device.destroyFramebuffer(m_framebuffers[i]);
+            }
+        }
+
+        AttachmentResource GetSwapChainAttachment(uint32_t imageIndex)
+        {
+            AttachmentResource result = {};
+            result.isSwapChain = true;
+            result.m_image = s_swapChainImages[imageIndex];
+            result.m_imageView = s_swapChainImageViews[imageIndex];
+            
+            return result;
+        }
+
+        AttachmentResource CreateAttachment(uint32_t width, uint32_t height, vk::Format format, vk::ImageUsageFlags usage)
+        {
+            AttachmentResource result = {};
+
+            result.m_format = format;
+            result.m_usage = usage;
+
+            CreateVulkanImage(width, height, format, vk::ImageTiling::eOptimal, usage | vk::ImageUsageFlagBits::eInputAttachment, vk::MemoryPropertyFlagBits::eDeviceLocal, result.m_image, result.m_memory);
+
+            if (usage & vk::ImageUsageFlagBits::eColorAttachment)
+            {
+                CreateVulkanImageView(result.m_image, format, vk::ImageAspectFlagBits::eColor);
+            }
+            else if (usage & vk::ImageUsageFlagBits::eDepthStencilAttachment)
+            {
+                CreateVulkanImageView(result.m_image, format, vk::ImageAspectFlagBits::eDepth | vk::ImageAspectFlagBits::eStencil);
+            }
+
+            return result;
+        }
+
+        void DestroyAttachment(AttachmentResource& attachment)
+        {
+            if (attachment.isSwapChain)
+            {
+                return;
+            }
+
+            s_device.destroyImageView(attachment.m_imageView);
+            s_device.destroyImage(attachment.m_image);
+            s_device.freeMemory(attachment.m_memory);
+        }
+
+        vk::AccessFlags MapAcessForVulkan(const Access& access)
+        {
+            switch (access)
+            {
+            case Access::ColorAttachmentWrite:
+                return vk::AccessFlagBits::eColorAttachmentWrite;
+            case Access::ShaderRead:
+                return vk::AccessFlagBits::eShaderRead;
+            default:
+                assert(false);
+                return vk::AccessFlagBits::eShaderRead;
+            }
         }
 
         vk::PipelineStageFlags MapPipelineStageForVulkan(const PipelineStage& pipelineStage)
@@ -392,6 +532,12 @@ namespace GFX
         }
 
         vk::RenderPass m_renderPass = nullptr;
+        std::map<uint32_t, AttachmentResource> m_attachmentDic;
+        std::vector<vk::Framebuffer> m_framebuffers;
+
+        uint32_t m_width;
+        uint32_t m_height;
+
         uint32_t handle = 0;
     };
 
@@ -1593,6 +1739,17 @@ namespace GFX
         renderPassBeginInfo.setPClearValues(clearValues.data());
         
         s_commandBuffersDefault[s_currentImageIndex].beginRenderPass(renderPassBeginInfo, vk::SubpassContents::eInline);
+    }
+
+    void BeginRenderPass(RenderPass renderPass)
+    {
+        auto renderPassResource = s_renderPassHandlePool.FetchResource(renderPass.id);
+        
+        vk::RenderPassBeginInfo renderPassBeginInfo = {};
+
+        renderPassBeginInfo.setRenderPass(renderPassResource->m_renderPass);
+        renderPassBeginInfo.setFramebuffer(renderPassResource->m_framebuffers[s_currentImageIndex]);
+        
     }
 
     void EndRenderPass()

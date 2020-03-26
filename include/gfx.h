@@ -304,6 +304,8 @@ namespace GFX
 
     struct RenderPassDescription
     {
+        uint32_t width;
+        uint32_t height;
         std::vector<AttachmentDescription> attachments;
         std::vector<SubPassDescription> subpasses;
         std::vector<DependencyDescription> dependencies;
@@ -549,6 +551,8 @@ namespace GFX
     void DrawIndexed(uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, uint32_t vertexOffset = 0, uint32_t firstInstance = 0);
     void SetViewport(float x, float y, float w, float h);
     void SetScissor(float x, float y, float w, float h);
+
+    void BeginRenderPass(RenderPass renderPass);
     void BeginDefaultRenderPass();
     void EndRenderPass();
 
