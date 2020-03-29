@@ -91,9 +91,9 @@ namespace GFX
     std::vector<VkImageView> s_swapChainImageViews;
 
     // TODO RenderPass Abstraction
-    vk::Image s_depthImage;
-    vk::DeviceMemory s_depthImageMemory;
-    vk::ImageView s_depthImageView;
+    // vk::Image s_depthImage;
+    // vk::DeviceMemory s_depthImageMemory;
+    // vk::ImageView s_depthImageView;
 
     uint32_t s_currentImageIndex = 0;
     uint32_t s_currentFrame = 0;
@@ -102,16 +102,11 @@ namespace GFX
     Current Pipeline
     */
     PipelineResource* s_currentPipleline = nullptr;
-    
-    /*
-    Default Render Pass
-    */
-    vk::RenderPass s_renderPassDefault = nullptr;
 
     /*
     Swap Chain Frame Buffers
     */
-    std::vector<VkFramebuffer> s_swapChainFrameBuffers;
+    // std::vector<VkFramebuffer> s_swapChainFrameBuffers;
 
     /*
     Default Command Pool
@@ -204,9 +199,9 @@ namespace GFX
     void CreateSwapChain();
     void RecreateSwapChain();
     void CreateImageViews();
-    void CreateDepthImage();
-    void CreateDefaultRenderPass();
-    void CreateSwapChainFramebuffers();
+    // void CreateDepthImage();
+    // void CreateDefaultRenderPass();
+    // void CreateSwapChainFramebuffers();
     void CreateCommandPoolDefault();
     void CreateCommandBuffersDefault();
     void CreateDescriptorPoolDefault();
@@ -462,6 +457,8 @@ namespace GFX
             {
                 return;
             }
+
+            s_device.waitIdle();
 
             s_device.destroyImageView(attachment.m_imageView);
             s_device.destroyImage(attachment.m_image);
@@ -799,7 +796,10 @@ namespace GFX
             pipelineCreateInfo.setPColorBlendState(&colorBlendStateCreateInfo);
             pipelineCreateInfo.setPDynamicState(&dynamicStateCreateInfo);
             pipelineCreateInfo.setLayout(m_pipelineLayout);
-            pipelineCreateInfo.setRenderPass(s_renderPassDefault);
+
+            RenderPassResource* renderPassResource = s_renderPassHandlePool.FetchResource(desc.renderPass.id);
+
+            pipelineCreateInfo.setRenderPass(renderPassResource->m_renderPass);
             pipelineCreateInfo.setSubpass(0);
 
             auto createGraphicsPipelineResult = s_device.createGraphicsPipeline(nullptr, pipelineCreateInfo);
@@ -1703,15 +1703,20 @@ namespace GFX
 
         CreateSwapChain();
         CreateImageViews();
-        CreateDefaultRenderPass();
+        // CreateDefaultRenderPass();
      
         CreateCommandPoolDefault();
-        CreateDepthImage();
-        CreateSwapChainFramebuffers();
+        // CreateDepthImage();
+        // CreateSwapChainFramebuffers();
 
         CreateCommandBuffersDefault();
         CreateSyncObjects();
         CreateDescriptorPoolDefault();
+    }
+
+    void Resize(int width, int height)
+    {
+
     }
 
     bool BeginFrame()
@@ -1742,7 +1747,7 @@ namespace GFX
         return true;
     }
 
-    void BeginDefaultRenderPass()
+    /*void BeginDefaultRenderPass()
     {
         vk::RenderPassBeginInfo renderPassBeginInfo = {};
         
@@ -1768,7 +1773,7 @@ namespace GFX
         renderPassBeginInfo.setPClearValues(clearValues.data());
         
         s_commandBuffersDefault[s_currentImageIndex].beginRenderPass(renderPassBeginInfo, vk::SubpassContents::eInline);
-    }
+    }*/
 
     void BeginRenderPass(RenderPass renderPass)
     {
@@ -1866,21 +1871,21 @@ namespace GFX
 
         s_device.destroyCommandPool(s_commandPoolDefault);
 
-        for (auto framebuffer : s_swapChainFrameBuffers)
+       /* for (auto framebuffer : s_swapChainFrameBuffers)
         {
             vkDestroyFramebuffer(s_device, framebuffer, nullptr);
-        }
+        }*/
 
-        s_device.destroyRenderPass(s_renderPassDefault);
+     /*   s_device.destroyRenderPass(s_renderPassDefault);*/
 
         for (auto imageView : s_swapChainImageViews)
         {
             vkDestroyImageView(s_device, imageView, nullptr);
         }
 
-        s_device.destroyImageView(s_depthImageView);
+      /*  s_device.destroyImageView(s_depthImageView);
         s_device.destroyImage(s_depthImage);
-        s_device.freeMemory(s_depthImageMemory);
+        s_device.freeMemory(s_depthImageMemory);*/
 
         vkDestroySwapchainKHR(s_device, s_swapChain, nullptr);
         vkDestroySurfaceKHR(s_instance, s_surface, nullptr);
@@ -1896,7 +1901,7 @@ namespace GFX
         }
     }
 
-    void CreateDepthImage()
+  /*  void CreateDepthImage()
     {
         vk::Format depthFormat = FindDepthFormat();
         CreateVulkanImage(s_swapChainImageExtent.width, s_swapChainImageExtent.height, 
@@ -1915,9 +1920,9 @@ namespace GFX
 
         s_depthImageView = CreateVulkanImageView(s_depthImage, depthFormat, targetAspect);
         TransitionImageLayout(s_depthImage, depthFormat, vk::ImageLayout::eUndefined, vk::ImageLayout::eDepthStencilAttachmentOptimal);
-    }
+    }*/
 
-    void CreateDefaultRenderPass()
+    /*void CreateDefaultRenderPass()
     {
         vk::AttachmentDescription colorAttachment = {};
         colorAttachment.setFormat(s_swapChainImageFormat);
@@ -1963,7 +1968,7 @@ namespace GFX
         auto createRenderPassResult = s_device.createRenderPass(renderPassCreateInfo);
         VK_ASSERT(createRenderPassResult);
         s_renderPassDefault = createRenderPassResult.value;
-    }
+    }*/
 
     void CreateSwapChain()
     {
@@ -2033,10 +2038,10 @@ namespace GFX
     {
         s_device.waitIdle();
 
-        for (auto framebuffer : s_swapChainFrameBuffers)
+        /*for (auto framebuffer : s_swapChainFrameBuffers)
         {
             vkDestroyFramebuffer(s_device, framebuffer, nullptr);
-        }
+        }*/
 
         for (auto imageView : s_swapChainImageViews)
         {
@@ -2045,21 +2050,21 @@ namespace GFX
 
         vkDestroySwapchainKHR(s_device, s_swapChain, nullptr);
 
-        s_swapChainFrameBuffers.clear();
+        // s_swapChainFrameBuffers.clear();
         s_swapChainImageViews.clear();
         s_swapChainImages.clear();
 
-        s_device.destroyImageView(s_depthImageView);
-        s_device.destroyImage(s_depthImage);
-        s_device.freeMemory(s_depthImageMemory);
+        // s_device.destroyImageView(s_depthImageView);
+       /* s_device.destroyImage(s_depthImage);
+        s_device.freeMemory(s_depthImageMemory);*/
 
         CreateSwapChain();
         CreateImageViews();
-        CreateDepthImage();
-        CreateSwapChainFramebuffers();
+        // CreateDepthImage();
+        // CreateSwapChainFramebuffers();
     }
 
-    void CreateSwapChainFramebuffers()
+  /*  void CreateSwapChainFramebuffers()
     {
         s_swapChainFrameBuffers.resize(s_swapChainImageViews.size());
         for (size_t i = 0; i < s_swapChainImageViews.size(); i++)
@@ -2078,7 +2083,7 @@ namespace GFX
             auto result = vkCreateFramebuffer(s_device, &framebufferInfo, nullptr, &s_swapChainFrameBuffers[i]);
             assert(result == VK_SUCCESS);
         }
-    }
+    }*/
 
     void CreateCommandPoolDefault()
     {

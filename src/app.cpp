@@ -73,6 +73,7 @@ static void framebufferResizeCallback(GLFWwindow* window, int width, int height)
 	s_height = height;
 
 	spdlog::info("Window Resize");
+	GFX::Resize(width, height);
 }
 
 void App::Init()
@@ -146,12 +147,15 @@ void App::Init()
 	GFX::UniformBindings uniformBindings = {};
 	uniformBindings.AddUniformLayout(uniformLayout);
 
+	CreateRenderPass();
+
 	GFX::GraphicsPipelineDescription pipelineDesc = {};
 	pipelineDesc.primitiveTopology = GFX::PrimitiveTopology::TriangleList;
 	pipelineDesc.shaders.push_back(vertShader);
 	pipelineDesc.shaders.push_back(fragShader);
 	pipelineDesc.vertexBindings = vertexBindings;
 	pipelineDesc.uniformBindings = uniformBindings;
+	pipelineDesc.renderPass = renderPass;
 
 	pipeline = GFX::CreatePipeline(pipelineDesc);
 
@@ -179,8 +183,6 @@ void App::Init()
 	uniformDesc.AddImageAttribute(2, image, sampler);
 
 	uniform = GFX::CreateUniform(uniformDesc);
-	
-	CreateRenderPass();
 }
 
 void App::CreateRenderPass()

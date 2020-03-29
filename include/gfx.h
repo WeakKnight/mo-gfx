@@ -520,6 +520,7 @@ namespace GFX
         PrimitiveTopology primitiveTopology;
         VertexBindings vertexBindings;
         UniformBindings uniformBindings;
+        RenderPass renderPass;
     };
 
     struct Pipeline
@@ -572,6 +573,9 @@ namespace GFX
     /*
     Rendering Operation
     */
+
+    void Resize(int width, int height);
+
     bool BeginFrame();
     void ApplyPipeline(Pipeline pipeline);
     void BindIndexBuffer(Buffer buffer, size_t offset, IndexType indexType);
@@ -583,7 +587,7 @@ namespace GFX
 
     void BeginRenderPass(RenderPass renderPass);
     void NextRenderPass();
-    void BeginDefaultRenderPass();
+    // void BeginDefaultRenderPass();
     void EndRenderPass();
 
     void EndFrame();
