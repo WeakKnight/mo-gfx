@@ -208,7 +208,9 @@ void App::CreateRenderPass()
 	depthAttachment.type = GFX::AttachmentType::DepthStencil;
 	depthAttachment.loadAction = GFX::AttachmentLoadAction::Clear;
 
+	// attachment 0, swap chain
 	renderPassDescription.attachments.push_back(swapChainAttachment);
+	// attachment 1, depth
 	renderPassDescription.attachments.push_back(depthAttachment);
 
 	GFX::SubPassDescription subPassSwapChain = {};
