@@ -66,6 +66,27 @@ namespace GFX
         GLFWwindow* window = nullptr;
     };
 
+    struct Color
+    {
+        Color(float r, float g, float b, float a)
+        {
+            this->r = r;
+            this->g = g;
+            this->b = b;
+            this->a = a;
+        }
+
+        Color()
+        {
+            r = 0.0f;
+            g = 0.0f;
+            b = 0.0f;
+            a = 0.0f;
+        }
+
+        float r, g, b, a;
+    };
+
     enum class PipelineType
     {
         Compute,
@@ -250,6 +271,13 @@ namespace GFX
         DontCare,
     };
 
+    struct ClearValue
+    {
+        Color color = Color();
+        float depth = 1.0f;
+        uint32_t stencil = 0;
+    };
+
     struct AttachmentDescription
     {
         Format format;
@@ -260,6 +288,7 @@ namespace GFX
         AttachmentLoadAction stencilLoadAction = AttachmentLoadAction::DontCare;
         AttachmentStoreAction storeAction = AttachmentStoreAction::DontCare;
         AttachmentStoreAction stencilStoreAction = AttachmentStoreAction::DontCare;
+        ClearValue clearValue;
         AttachmentType type;
     };
 
@@ -553,6 +582,7 @@ namespace GFX
     void SetScissor(float x, float y, float w, float h);
 
     void BeginRenderPass(RenderPass renderPass);
+    void NextRenderPass();
     void BeginDefaultRenderPass();
     void EndRenderPass();
 

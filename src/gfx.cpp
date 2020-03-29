@@ -269,25 +269,32 @@ namespace GFX
                 attachmentDescs[i].setStencilStoreOp(MapStoreOpForVulkan(attachmentDesc.stencilStoreAction));
                 attachmentDescs[i].setInitialLayout(vk::ImageLayout::eUndefined);
                 
+                vk::ClearValue clearValue = {};
+
                 if (attachmentDesc.type == AttachmentType::Present)
                 {
                     attachmentDescs[i].setFinalLayout(vk::ImageLayout::ePresentSrcKHR);
                     m_attachmentDic[i] = GetSwapChainAttachment(s_currentImageIndex);
+                    clearValue.color = MapClearColorValueForVulkan(attachmentDesc.clearValue);
                 }
                 else if (attachmentDesc.type == AttachmentType::DepthStencil)
                 {
                     attachmentDescs[i].setFinalLayout(vk::ImageLayout::eDepthStencilAttachmentOptimal);
                     m_attachmentDic[i] = CreateAttachment(attachmentDesc.width, attachmentDesc.height, MapFormatForVulkan(attachmentDesc.format), vk::ImageUsageFlagBits::eDepthStencilAttachment);
+                    clearValue.depthStencil = MapClearDepthStencilValueForVulkan(attachmentDesc.clearValue);
                 }
                 else if (attachmentDesc.type == AttachmentType::Color)
                 {
                     attachmentDescs[i].setFinalLayout(vk::ImageLayout::eColorAttachmentOptimal);
                     m_attachmentDic[i] = CreateAttachment(attachmentDesc.width, attachmentDesc.height, MapFormatForVulkan(attachmentDesc.format), vk::ImageUsageFlagBits::eColorAttachment);
+                    clearValue.color = MapClearColorValueForVulkan(attachmentDesc.clearValue);
                 }
                 else
                 {
                     assert(false);
                 }
+
+                m_clearValues.push_back(clearValue);
             }
 
             std::vector<vk::SubpassDescription> subpassDescs(desc.subpasses.size());
@@ -533,9 +540,28 @@ namespace GFX
             }
         }
 
+        vk::ClearColorValue MapClearColorValueForVulkan(const ClearValue& clearValue)
+        {
+            vk::ClearColorValue clearColor = {};
+            clearColor.setFloat32({ clearValue.color.r, clearValue.color.g, clearValue.color.b, clearValue.color.a });
+
+            return clearColor;
+        }
+
+        vk::ClearDepthStencilValue MapClearDepthStencilValueForVulkan(const ClearValue& clearValue)
+        {
+            vk::ClearDepthStencilValue clearDepthStencil = {};
+            clearDepthStencil.setDepth(clearValue.depth);
+            clearDepthStencil.setStencil(clearValue.stencil);
+
+            return clearDepthStencil;
+        }
+
         vk::RenderPass m_renderPass = nullptr;
         std::map<uint32_t, AttachmentResource> m_attachmentDic;
         std::vector<vk::Framebuffer> m_framebuffers;
+
+        std::vector<vk::ClearValue> m_clearValues;
 
         uint32_t m_width;
         uint32_t m_height;
@@ -1697,6 +1723,7 @@ namespace GFX
         
         if (acquireNextImageResult.result == vk::Result::eErrorOutOfDateKHR || acquireNextImageResult.result == vk::Result::eSuboptimalKHR)
         {
+            spdlog::info("Inline Resize");
             RecreateSwapChain();
             return false;
         }
@@ -1751,7 +1778,20 @@ namespace GFX
 
         renderPassBeginInfo.setRenderPass(renderPassResource->m_renderPass);
         renderPassBeginInfo.setFramebuffer(renderPassResource->m_framebuffers[s_currentImageIndex]);
-        
+        renderPassBeginInfo.setClearValueCount(renderPassResource->m_clearValues.size());
+        renderPassBeginInfo.setPClearValues(renderPassResource->m_clearValues.data());
+
+        vk::Rect2D rect = {};
+        rect.setOffset({ 0, 0 });
+        rect.setExtent({ renderPassResource->m_width, renderPassResource->m_height });
+        renderPassBeginInfo.setRenderArea(rect);
+
+        s_commandBuffersDefault[s_currentImageIndex].beginRenderPass(renderPassBeginInfo, vk::SubpassContents::eInline);
+    }
+
+    void NextRenderPass()
+    {
+        s_commandBuffersDefault[s_currentImageIndex].nextSubpass(vk::SubpassContents::eInline);
     }
 
     void EndRenderPass()
@@ -1792,6 +1832,7 @@ namespace GFX
         auto presentResult = s_presentQueueDefault.presentKHR(presentInfo);
         if (presentResult == vk::Result::eErrorOutOfDateKHR || presentResult == vk::Result::eSuboptimalKHR)
         {
+            spdlog::info("Inline Resize");
             RecreateSwapChain();
         }
         else

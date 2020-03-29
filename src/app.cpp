@@ -71,6 +71,8 @@ static void framebufferResizeCallback(GLFWwindow* window, int width, int height)
 {
 	s_width = width;
 	s_height = height;
+
+	spdlog::info("Window Resize");
 }
 
 void App::Init()
@@ -254,7 +256,7 @@ void App::MainLoop()
 
 		if (GFX::BeginFrame())
 		{
-			GFX::BeginDefaultRenderPass();
+			GFX::BeginRenderPass(renderPass);
 
 			GFX::ApplyPipeline(pipeline);
 			
