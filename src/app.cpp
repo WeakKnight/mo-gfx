@@ -74,6 +74,7 @@ static void framebufferResizeCallback(GLFWwindow* window, int width, int height)
 
 	spdlog::info("Window Resize");
 	GFX::Resize(width, height);
+	GFX::ResizeRenderPass(renderPass, width, height);
 }
 
 void App::Init()
@@ -189,6 +190,8 @@ void App::CreateRenderPass()
 {
 	// Render Pass
 	GFX::RenderPassDescription renderPassDescription = {};
+	renderPassDescription.width = s_width;
+	renderPassDescription.height = s_height;
 
 	GFX::AttachmentDescription swapChainAttachment = {};
 	swapChainAttachment.format = GFX::Format::SWAPCHAIN;
@@ -214,9 +217,6 @@ void App::CreateRenderPass()
 	subPassSwapChain.SetDepthStencilAttachment(1);
 
 	renderPassDescription.subpasses.push_back(subPassSwapChain);
-	
-	renderPassDescription.width = s_width;
-	renderPassDescription.height = s_height;
 
 	/*GFX::DependencyDescription dependencyDesc = {};
 	dependencyDesc.srcSubpass = 0;
@@ -258,7 +258,7 @@ void App::MainLoop()
 
 		if (GFX::BeginFrame())
 		{
-			GFX::BeginRenderPass(renderPass);
+			GFX::BeginRenderPass(renderPass, 0, 0, s_width, s_height);
 
 			GFX::ApplyPipeline(pipeline);
 			

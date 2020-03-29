@@ -251,6 +251,7 @@ namespace GFX
         {
             m_width = desc.width;
             m_height = desc.height;
+            m_attachments = desc.attachments;
 
             std::vector<vk::AttachmentDescription> attachmentDescs(desc.attachments.size());
             for (int i = 0; i < desc.attachments.size(); i++)
@@ -363,7 +364,7 @@ namespace GFX
             VK_ASSERT(createRenderPassResult);
             m_renderPass = createRenderPassResult.value;
 
-            CreateFramebuffers(desc);
+            CreateFramebuffers();
         }
 
         ~RenderPassResource()
@@ -378,14 +379,33 @@ namespace GFX
             s_device.destroyRenderPass(m_renderPass);
         }
 
-        void CreateFramebuffers(const RenderPassDescription& desc)
+        void Resize(int width, int height)
+        {
+            m_width = width;
+            m_height = height;
+
+            for (int i = 0; i < m_attachments.size(); i++)
+            {
+                auto& attachment = m_attachments[i];
+                attachment.width = width;
+                attachment.height = height;
+                
+                DestroyAttachment(m_attachmentDic[i]);
+                m_attachmentDic[i] = ResizeAttachment(m_attachmentDic[i], width, height);
+            }
+
+            DestroyFramebuffers();
+            CreateFramebuffers();
+        }
+
+        void CreateFramebuffers()
         {
             m_framebuffers.resize(s_swapChainImages.size());
 
             for (int i = 0; i < s_swapChainImages.size(); i++)
             {
                 std::vector<vk::ImageView> imageViews;
-                for (int j = 0; j < desc.attachments.size(); j++)
+                for (int j = 0; j < m_attachments.size(); j++)
                 {
                     if (m_attachmentDic[j].isSwapChain)
                     {
@@ -404,7 +424,7 @@ namespace GFX
                 frameBufferCreateInfo.setWidth(m_width);
                 frameBufferCreateInfo.setHeight(m_height);
                 frameBufferCreateInfo.setLayers(1);
-                frameBufferCreateInfo.setAttachmentCount(desc.attachments.size());
+                frameBufferCreateInfo.setAttachmentCount(m_attachments.size());
 
                 auto createFramebufferResult = s_device.createFramebuffer(frameBufferCreateInfo);
                 VK_ASSERT(createFramebufferResult);
@@ -446,6 +466,29 @@ namespace GFX
             else if (usage & vk::ImageUsageFlagBits::eDepthStencilAttachment)
             {
                 result.m_imageView = CreateVulkanImageView(result.m_image, format, vk::ImageAspectFlagBits::eDepth | vk::ImageAspectFlagBits::eStencil);
+            }
+
+            return result;
+        }
+
+        AttachmentResource ResizeAttachment(AttachmentResource oldAttachment, int width, int height)
+        {
+            AttachmentResource result = {};
+            result.m_format = oldAttachment.m_format;
+            result.m_usage = oldAttachment.m_usage;
+            result.isSwapChain = oldAttachment.isSwapChain;
+
+            if (!result.isSwapChain)
+            {
+                CreateVulkanImage(width, height, oldAttachment.m_format, vk::ImageTiling::eOptimal, oldAttachment.m_usage | vk::ImageUsageFlagBits::eInputAttachment, vk::MemoryPropertyFlagBits::eDeviceLocal, result.m_image, result.m_memory);
+                if (oldAttachment.m_usage & vk::ImageUsageFlagBits::eColorAttachment)
+                {
+                    result.m_imageView = CreateVulkanImageView(result.m_image, oldAttachment.m_format, vk::ImageAspectFlagBits::eColor);
+                }
+                else if (oldAttachment.m_usage & vk::ImageUsageFlagBits::eDepthStencilAttachment)
+                {
+                    result.m_imageView = CreateVulkanImageView(result.m_image, oldAttachment.m_format, vk::ImageAspectFlagBits::eDepth | vk::ImageAspectFlagBits::eStencil);
+                }
             }
 
             return result;
@@ -560,9 +603,11 @@ namespace GFX
 
         std::vector<vk::ClearValue> m_clearValues;
 
+        std::vector<AttachmentDescription> m_attachments;
+
         uint32_t m_width;
         uint32_t m_height;
-
+       
         uint32_t handle = 0;
     };
 
@@ -1716,7 +1761,14 @@ namespace GFX
 
     void Resize(int width, int height)
     {
+        RecreateSwapChain();
+    }
 
+    // resize all attachments
+    void ResizeRenderPass(RenderPass renderPass, int width, int height)
+    {
+        RenderPassResource* renderPassResource = s_renderPassHandlePool.FetchResource(renderPass.id);
+        renderPassResource->Resize(width, height);
     }
 
     bool BeginFrame()
@@ -1775,7 +1827,7 @@ namespace GFX
         s_commandBuffersDefault[s_currentImageIndex].beginRenderPass(renderPassBeginInfo, vk::SubpassContents::eInline);
     }*/
 
-    void BeginRenderPass(RenderPass renderPass)
+    void BeginRenderPass(RenderPass renderPass, int offsetX, int offsetY, int width, int height)
     {
         auto renderPassResource = s_renderPassHandlePool.FetchResource(renderPass.id);
         
@@ -1787,8 +1839,8 @@ namespace GFX
         renderPassBeginInfo.setPClearValues(renderPassResource->m_clearValues.data());
 
         vk::Rect2D rect = {};
-        rect.setOffset({ 0, 0 });
-        rect.setExtent({ renderPassResource->m_width, renderPassResource->m_height });
+        rect.setOffset({ offsetX, offsetY });
+        rect.setExtent({ (uint32_t)width, (uint32_t)height });
         renderPassBeginInfo.setRenderArea(rect);
 
         s_commandBuffersDefault[s_currentImageIndex].beginRenderPass(renderPassBeginInfo, vk::SubpassContents::eInline);

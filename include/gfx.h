@@ -87,6 +87,23 @@ namespace GFX
         float r, g, b, a;
     };
 
+    struct Vec2
+    {
+        Vec2(float x, float y)
+        {
+            this->x = x;
+            this->y = y;
+        }
+
+        Vec2()
+        {
+            this->x = 0.0f;
+            this->y = 0.0f;
+        }
+
+        float x, y;
+    };
+
     enum class PipelineType
     {
         Compute,
@@ -575,6 +592,7 @@ namespace GFX
     */
 
     void Resize(int width, int height);
+    void ResizeRenderPass(RenderPass renderPass, int width, int height);
 
     bool BeginFrame();
     void ApplyPipeline(Pipeline pipeline);
@@ -585,7 +603,7 @@ namespace GFX
     void SetViewport(float x, float y, float w, float h);
     void SetScissor(float x, float y, float w, float h);
 
-    void BeginRenderPass(RenderPass renderPass);
+    void BeginRenderPass(RenderPass renderPass, int offsetX, int offsetY, int width, int height);
     void NextRenderPass();
     // void BeginDefaultRenderPass();
     void EndRenderPass();
