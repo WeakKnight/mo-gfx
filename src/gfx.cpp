@@ -481,7 +481,7 @@ namespace GFX
 
             if (!result.isSwapChain)
             {
-                CreateVulkanImage(width, height, oldAttachment.m_format, vk::ImageTiling::eOptimal, oldAttachment.m_usage | vk::ImageUsageFlagBits::eInputAttachment, vk::MemoryPropertyFlagBits::eDeviceLocal, result.m_image, result.m_memory);
+                CreateVulkanImage(width, height, oldAttachment.m_format, vk::ImageTiling::eOptimal, oldAttachment.m_usage | vk::ImageUsageFlagBits::eInputAttachment | vk::ImageUsageFlagBits::eSampled, vk::MemoryPropertyFlagBits::eDeviceLocal, result.m_image, result.m_memory);
                 if (oldAttachment.m_usage & vk::ImageUsageFlagBits::eColorAttachment)
                 {
                     result.m_imageView = CreateVulkanImageView(result.m_image, oldAttachment.m_format, vk::ImageAspectFlagBits::eColor);

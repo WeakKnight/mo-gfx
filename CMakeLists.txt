@@ -43,3 +43,5 @@ ENDIF()
 
 target_include_directories(${LIB_NAME} PRIVATE Vulkan::Vulkan)
 target_link_libraries(${LIB_NAME} Vulkan::Vulkan)
+
+add_subdirectory(samples)
