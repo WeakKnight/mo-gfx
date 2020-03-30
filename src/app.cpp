@@ -83,6 +83,15 @@ static void framebufferResizeCallback(GLFWwindow* window, int width, int height)
 	spdlog::info("Window Resize");
 	GFX::Resize(width, height);
 	GFX::ResizeRenderPass(renderPass, width, height);
+
+	GFX::DestroyUniform(screenQuadUniform);
+
+	GFX::UniformDescription screenQuadUniformDesc = {};
+	screenQuadUniformDesc.SetUniformLayout(screenQuadUniformLayout);
+	screenQuadUniformDesc.SetStorageMode(GFX::UniformStorageMode::Dynamic);
+	screenQuadUniformDesc.AddAttachmentAttribute(0, renderPass, 1, sampler);
+
+	screenQuadUniform = GFX::CreateUniform(screenQuadUniformDesc);
 }
 
 void App::Init()
