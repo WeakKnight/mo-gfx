@@ -489,7 +489,14 @@ namespace GFX
         Sampler sampler;
     };
 
-    struct UniformAttachmentAttribute
+    struct UniformInputAttachmentAttribute
+    {
+        uint32_t binding;
+        RenderPass renderPass;
+        uint32_t attachmentIndex;
+    };
+
+    struct UniformSampledAttachmentAttribute
     {
         uint32_t binding;
         RenderPass renderPass;
@@ -520,15 +527,25 @@ namespace GFX
             m_imageAttributes.push_back(attr);
         }
 
-        void AddAttachmentAttribute(uint32_t binding, RenderPass renderPass, uint32_t attachmentIndex, Sampler sampler)
+        void AddInputAttachmentAttribute(uint32_t binding, RenderPass renderPass, uint32_t attachmentIndex)
         {
-            UniformAttachmentAttribute attr = {};
+            UniformInputAttachmentAttribute attr = {};
+            attr.binding = binding;
+            attr.renderPass = renderPass;
+            attr.attachmentIndex = attachmentIndex;
+
+            m_inputAttachmentAttributes.push_back(attr);
+        }
+
+        void AddSampledAttachmentAttribute(uint32_t binding, RenderPass renderPass, uint32_t attachmentIndex, Sampler sampler)
+        {
+            UniformSampledAttachmentAttribute attr = {};
             attr.binding = binding;
             attr.renderPass = renderPass;
             attr.attachmentIndex = attachmentIndex;
             attr.sampler = sampler;
 
-            m_attachmentAttributes.push_back(attr);
+            m_sampledAttachmentAttributes.push_back(attr);
         }
 
         void SetUniformLayout(UniformLayout layout)
@@ -545,7 +562,8 @@ namespace GFX
         UniformStorageMode m_storageMode;
         std::vector<UniformBufferAtrribute> m_bufferAtrributes;
         std::vector<UniformImageAttribute> m_imageAttributes;
-        std::vector<UniformAttachmentAttribute> m_attachmentAttributes;
+        std::vector<UniformInputAttachmentAttribute> m_inputAttachmentAttributes;
+        std::vector<UniformSampledAttachmentAttribute> m_sampledAttachmentAttributes;
     };
 
     struct Uniform

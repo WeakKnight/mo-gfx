@@ -457,7 +457,7 @@ namespace GFX
             result.m_format = format;
             result.m_usage = usage;
 
-            CreateVulkanImage(width, height, format, vk::ImageTiling::eOptimal, usage | vk::ImageUsageFlagBits::eInputAttachment, vk::MemoryPropertyFlagBits::eDeviceLocal, result.m_image, result.m_memory);
+            CreateVulkanImage(width, height, format, vk::ImageTiling::eOptimal, usage | vk::ImageUsageFlagBits::eInputAttachment | vk::ImageUsageFlagBits::eSampled, vk::MemoryPropertyFlagBits::eDeviceLocal, result.m_image, result.m_memory);
 
             if (usage & vk::ImageUsageFlagBits::eColorAttachment)
             {
@@ -1290,10 +1290,43 @@ namespace GFX
                     s_device.updateDescriptorSets(writeDescriptorSet, nullptr);
                 }
 
-                for (size_t j = 0; j < desc.m_attachmentAttributes.size(); j++)
+                for (size_t j = 0; j < desc.m_inputAttachmentAttributes.size(); j++)
                 {
-                    auto attribute = desc.m_attachmentAttributes[j];
+                    auto attribute = desc.m_inputAttachmentAttributes[j];
                     RenderPassResource* renderPassResource =  s_renderPassHandlePool.FetchResource(attribute.renderPass.id);
+
+                    vk::ImageView imageView = {};
+                    if (renderPassResource->m_attachmentDic[attribute.attachmentIndex].isSwapChain)
+                    {
+                        imageView = renderPassResource->GetSwapChainAttachment(i).m_imageView;
+                    }
+                    else
+                    {
+                        imageView = renderPassResource->m_attachmentDic[attribute.attachmentIndex].m_imageView;
+                    }
+
+                    // SamplerResource* samplerResource = s_samplerHandlePool.FetchResource(attribute.sampler.id);
+
+                    vk::DescriptorImageInfo imageInfo = {};
+                    imageInfo.setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal);
+                    // imageInfo.setSampler(samplerResource->m_sampler);
+                    imageInfo.setImageView(imageView);
+
+                    vk::WriteDescriptorSet writeDescriptorSet = {};
+                    writeDescriptorSet.setDescriptorCount(1);
+                    writeDescriptorSet.setPImageInfo(&imageInfo);
+                    writeDescriptorSet.setDstBinding(attribute.binding);
+                    writeDescriptorSet.setDstArrayElement(0);
+                    writeDescriptorSet.setDstSet(m_descriptorSets[i]);
+                    writeDescriptorSet.setDescriptorType(vk::DescriptorType::eInputAttachment);
+
+                    s_device.updateDescriptorSets(writeDescriptorSet, nullptr);
+                }
+
+                for (size_t j = 0; j < desc.m_sampledAttachmentAttributes.size(); j++)
+                {
+                    auto attribute = desc.m_sampledAttachmentAttributes[j];
+                    RenderPassResource* renderPassResource = s_renderPassHandlePool.FetchResource(attribute.renderPass.id);
 
                     vk::ImageView imageView = {};
                     if (renderPassResource->m_attachmentDic[attribute.attachmentIndex].isSwapChain)
@@ -1318,7 +1351,7 @@ namespace GFX
                     writeDescriptorSet.setDstBinding(attribute.binding);
                     writeDescriptorSet.setDstArrayElement(0);
                     writeDescriptorSet.setDstSet(m_descriptorSets[i]);
-                    writeDescriptorSet.setDescriptorType(vk::DescriptorType::eInputAttachment);
+                    writeDescriptorSet.setDescriptorType(vk::DescriptorType::eCombinedImageSampler);
 
                     s_device.updateDescriptorSets(writeDescriptorSet, nullptr);
                 }

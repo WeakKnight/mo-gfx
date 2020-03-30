@@ -89,7 +89,7 @@ static void framebufferResizeCallback(GLFWwindow* window, int width, int height)
 	GFX::UniformDescription screenQuadUniformDesc = {};
 	screenQuadUniformDesc.SetUniformLayout(screenQuadUniformLayout);
 	screenQuadUniformDesc.SetStorageMode(GFX::UniformStorageMode::Dynamic);
-	screenQuadUniformDesc.AddAttachmentAttribute(0, renderPass, 1, sampler);
+	screenQuadUniformDesc.AddSampledAttachmentAttribute(0, renderPass, 1, sampler);
 
 	screenQuadUniform = GFX::CreateUniform(screenQuadUniformDesc);
 }
@@ -193,7 +193,11 @@ void App::Init()
 	screenFragShader = GFX::CreateShader(screenQuadFragDesc);
 
 	GFX::UniformLayoutDescription screenQuadUniformLayoutDesc = {};
-	screenQuadUniformLayoutDesc.AddUniformBinding(0, GFX::UniformType::InputAttachment, GFX::ShaderStage::Fragment, 1);
+	screenQuadUniformLayoutDesc.AddUniformBinding(0, 
+		// GFX::UniformType::InputAttachment, 
+		GFX::UniformType::SampledImage,
+		GFX::ShaderStage::Fragment, 
+		1);
 
 	screenQuadUniformLayout = GFX::CreateUniformLayout(screenQuadUniformLayoutDesc);
 
@@ -239,7 +243,7 @@ void App::Init()
 	GFX::UniformDescription screenQuadUniformDesc = {};
 	screenQuadUniformDesc.SetUniformLayout(screenQuadUniformLayout);
 	screenQuadUniformDesc.SetStorageMode(GFX::UniformStorageMode::Dynamic);
-	screenQuadUniformDesc.AddAttachmentAttribute(0, renderPass, 1, sampler);
+	screenQuadUniformDesc.AddSampledAttachmentAttribute(0, renderPass, 1, sampler);
 
 	screenQuadUniform = GFX::CreateUniform(screenQuadUniformDesc);
 }
