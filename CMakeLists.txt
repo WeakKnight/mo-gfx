@@ -11,10 +11,6 @@ set(
 # Set C++11
 set (CMAKE_CXX_STANDARD 11)
 
-# Set Output Directory
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY $<1:${CMAKE_SOURCE_DIR}/bin>)
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_DEBUG $<1:${CMAKE_SOURCE_DIR}/bin>)
-
 include_directories(
     include/
     thirdparty/vma/
