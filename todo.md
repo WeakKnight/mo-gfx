@@ -1,8 +1,9 @@
-1. attachment as image sampler, not input attachment
-2. scene render
+1. attachment as image sampler, not input attachment[Done]
+2. build as library
 3. ktx texture
-4. cube texture
-5. mipmap
+4. gltf model renderer
+5. cube texture
+6. mipmap
 
 
 

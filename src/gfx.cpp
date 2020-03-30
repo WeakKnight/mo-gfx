@@ -4,8 +4,9 @@
 #include <vulkan/vulkan.hpp>
 #include <GLFW/glfw3.h>
 #include <shaderc/shaderc.hpp>
-#include <spdlog/spdlog.h>
 #include <map>
+#include <assert.h>
+#include <stdio.h>
 
 #define VK_ASSERT(resultObj) assert(resultObj.result == vk::Result::eSuccess)
 
@@ -679,10 +680,11 @@ namespace GFX
             if (status != shaderc_compilation_status_success)
             {
                 std::string errorMsg = module.GetErrorMessage();
-                spdlog::error("Shader Compiling Failed. Error: {}", errorMsg);
+                printf("Shader Compiling Failed. Error: %s\n", errorMsg.c_str());
+                // spdlog::error("Shader Compiling Failed. Error: {}", errorMsg);
                 if (status == shaderc_compilation_status_invalid_stage)
                 {
-                    spdlog::error("Wrong Shader Stage");
+                    printf("Wrong Shader Stage\n");
                 }
                 return std::vector<uint32_t>();
             }
@@ -1723,7 +1725,7 @@ namespace GFX
         appInfo.setApplicationVersion(VK_MAKE_VERSION(0, 0, 1));
         appInfo.setPEngineName("MO");
         appInfo.setEngineVersion(VK_MAKE_VERSION(0, 0, 1));
-        appInfo.setApiVersion(VK_API_VERSION_1_2);
+        appInfo.setApiVersion(VK_API_VERSION_1_1);
 
         vk::InstanceCreateInfo createInfo = vk::InstanceCreateInfo();
         createInfo.setPApplicationInfo(&appInfo);
@@ -1856,7 +1858,7 @@ namespace GFX
         
         if (acquireNextImageResult.result == vk::Result::eErrorOutOfDateKHR || acquireNextImageResult.result == vk::Result::eSuboptimalKHR)
         {
-            spdlog::info("Inline Resize");
+            printf("Inline Resize \n");
             RecreateSwapChain();
             return false;
         }
@@ -1965,7 +1967,7 @@ namespace GFX
         auto presentResult = s_presentQueueDefault.presentKHR(presentInfo);
         if (presentResult == vk::Result::eErrorOutOfDateKHR || presentResult == vk::Result::eSuboptimalKHR)
         {
-            spdlog::info("Inline Resize");
+            printf("Inline Resize \n");
             RecreateSwapChain();
         }
         else
