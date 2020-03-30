@@ -31,7 +31,7 @@ add_subdirectory(thirdparty/shaderc)
 file(GLOB HEADERS "include/*.h")
 file(GLOB SOURCES "src/*.cpp")
 
-add_library(${LIB_NAME} ${SOURCES} ${HEADERS})
+add_library(${LIB_NAME} ${SOURCES})
 # add_executable(${LIB_NAME} ${SOURCES} ${HEADERS})
 target_link_libraries(${LIB_NAME} glfw ${GLFW_LIBRARIES} shaderc)
 
