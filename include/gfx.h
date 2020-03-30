@@ -538,6 +538,8 @@ namespace GFX
         VertexBindings vertexBindings;
         UniformBindings uniformBindings;
         RenderPass renderPass;
+        bool enableDepthTest = false;
+        bool enableStencilTest = false;
     };
 
     struct Pipeline

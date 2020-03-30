@@ -18,6 +18,9 @@ static int s_height = HEIGHT;
 
 static GFX::Shader vertShader;
 static GFX::Shader fragShader;
+static GFX::Shader screenVertShader;
+static GFX::Shader screenFragShader;
+
 static GFX::Pipeline pipeline;
 static GFX::Buffer vertexBuffer;
 static GFX::Buffer indexBuffer;
@@ -27,6 +30,8 @@ static GFX::Uniform uniform;
 static GFX::Image image;
 static GFX::Sampler sampler;
 static GFX::RenderPass renderPass;
+
+static GFX::Pipeline screenQuadPipeline;
 
 struct Vertex
 {
@@ -157,8 +162,31 @@ void App::Init()
 	pipelineDesc.vertexBindings = vertexBindings;
 	pipelineDesc.uniformBindings = uniformBindings;
 	pipelineDesc.renderPass = renderPass;
+	pipelineDesc.enableDepthTest = true;
 
 	pipeline = GFX::CreatePipeline(pipelineDesc);
+
+	GFX::ShaderDescription screenQuadVertDesc = {};
+	screenQuadVertDesc.name = "default";
+	screenQuadVertDesc.codes = StringUtils::ReadFile("screen_quad.vert");
+	screenQuadVertDesc.stage = GFX::ShaderStage::Vertex;
+
+	GFX::ShaderDescription screenQuadFragDesc = {};
+	screenQuadFragDesc.name = "default";
+	screenQuadFragDesc.codes = StringUtils::ReadFile("screen_quad_test.frag");
+	screenQuadFragDesc.stage = GFX::ShaderStage::Fragment;
+
+	screenVertShader = GFX::CreateShader(screenQuadVertDesc);
+	screenFragShader = GFX::CreateShader(screenQuadFragDesc);
+
+	GFX::GraphicsPipelineDescription screenQuadPipelineDesc = {};
+	screenQuadPipelineDesc.primitiveTopology = GFX::PrimitiveTopology::TriangleList;
+	screenQuadPipelineDesc.renderPass = renderPass;
+	screenQuadPipelineDesc.shaders.push_back(screenVertShader);
+	screenQuadPipelineDesc.shaders.push_back(screenFragShader);
+	screenQuadPipelineDesc.enableDepthTest = false;
+
+	screenQuadPipeline = GFX::CreatePipeline(screenQuadPipelineDesc);
 
 	LoadTexture();
 
@@ -282,6 +310,9 @@ void App::MainLoop()
 
 			GFX::DrawIndexed(indices.size(), 1, 0);
 
+			GFX::ApplyPipeline(screenQuadPipeline);
+			GFX::Draw(3, 1, 0, 0);
+
 			GFX::EndRenderPass();
 
 			GFX::EndFrame();
@@ -307,6 +338,11 @@ void App::CleanUp()
 
 	GFX::DestroyShader(vertShader);
 	GFX::DestroyShader(fragShader);
+
+	GFX::DestroyPipeline(screenQuadPipeline);
+
+	GFX::DestroyShader(screenVertShader);
+	GFX::DestroyShader(screenFragShader);
 
 	GFX::Shutdown();
 

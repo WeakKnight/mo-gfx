@@ -783,11 +783,11 @@ namespace GFX
             rasterizationStateCreateInfo.setDepthBiasEnable(false);
 
             vk::PipelineDepthStencilStateCreateInfo depthStencilStateCreateInfo = {};
-            depthStencilStateCreateInfo.setDepthTestEnable(true);
+            depthStencilStateCreateInfo.setDepthTestEnable(desc.enableDepthTest);
             depthStencilStateCreateInfo.setDepthWriteEnable(true);
             depthStencilStateCreateInfo.setDepthCompareOp(vk::CompareOp::eLess);
             depthStencilStateCreateInfo.setDepthBoundsTestEnable(false);
-            depthStencilStateCreateInfo.setStencilTestEnable(false);
+            depthStencilStateCreateInfo.setStencilTestEnable(desc.enableStencilTest);
 
             vk::PipelineMultisampleStateCreateInfo multisampleStateCreateInfo = {};
             multisampleStateCreateInfo.setSampleShadingEnable(false);
@@ -1590,7 +1590,11 @@ namespace GFX
         {
             descriptorSets.push_back(s_currentDescriptors[i]);
         }
-        s_commandBuffersDefault[s_currentImageIndex].bindDescriptorSets(vk::PipelineBindPoint::eGraphics, s_currentPipleline->m_pipelineLayout, 0, descriptorSets, nullptr);
+
+        if (descriptorSets.size() > 0)
+        {
+            s_commandBuffersDefault[s_currentImageIndex].bindDescriptorSets(vk::PipelineBindPoint::eGraphics, s_currentPipleline->m_pipelineLayout, 0, descriptorSets, nullptr);
+        }
 
         s_commandBuffersDefault[s_currentImageIndex].draw(vertexCount, instanceCount, firstVertex, firstInstance);
     }
@@ -1602,7 +1606,11 @@ namespace GFX
         {
             descriptorSets.push_back(s_currentDescriptors[i]);
         }
-        s_commandBuffersDefault[s_currentImageIndex].bindDescriptorSets(vk::PipelineBindPoint::eGraphics, s_currentPipleline->m_pipelineLayout, 0, descriptorSets, nullptr);
+
+        if (descriptorSets.size() > 0)
+        {
+            s_commandBuffersDefault[s_currentImageIndex].bindDescriptorSets(vk::PipelineBindPoint::eGraphics, s_currentPipleline->m_pipelineLayout, 0, descriptorSets, nullptr);
+        }
 
         s_commandBuffersDefault[s_currentImageIndex].drawIndexed(indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
     }
