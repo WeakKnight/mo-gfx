@@ -845,7 +845,7 @@ namespace GFX
             RenderPassResource* renderPassResource = s_renderPassHandlePool.FetchResource(desc.renderPass.id);
 
             pipelineCreateInfo.setRenderPass(renderPassResource->m_renderPass);
-            pipelineCreateInfo.setSubpass(0);
+            pipelineCreateInfo.setSubpass(desc.subpass);
 
             auto createGraphicsPipelineResult = s_device.createGraphicsPipeline(nullptr, pipelineCreateInfo);
             VK_ASSERT(createGraphicsPipelineResult);
@@ -1201,8 +1201,10 @@ namespace GFX
             {
             case ImageUsage::SampledImage:
                 return vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled;
-            case ImageUsage::AttachmentImage:
+            case ImageUsage::ColorAttachment:
                 return vk::ImageUsageFlagBits::eColorAttachment;
+            case ImageUsage::DepthStencilAttachment:
+                return vk::ImageUsageFlagBits::eDepthStencilAttachment;
             default:
                 assert(false);
                 return vk::ImageUsageFlagBits::eSampled;
@@ -1284,6 +1286,39 @@ namespace GFX
                     writeDescriptorSet.setDstArrayElement(0);
                     writeDescriptorSet.setDstSet(m_descriptorSets[i]);
                     writeDescriptorSet.setDescriptorType(vk::DescriptorType::eUniformBuffer);
+
+                    s_device.updateDescriptorSets(writeDescriptorSet, nullptr);
+                }
+
+                for (size_t j = 0; j < desc.m_attachmentAttributes.size(); j++)
+                {
+                    auto attribute = desc.m_attachmentAttributes[j];
+                    RenderPassResource* renderPassResource =  s_renderPassHandlePool.FetchResource(attribute.renderPass.id);
+
+                    vk::ImageView imageView = {};
+                    if (renderPassResource->m_attachmentDic[attribute.attachmentIndex].isSwapChain)
+                    {
+                        imageView = renderPassResource->GetSwapChainAttachment(i).m_imageView;
+                    }
+                    else
+                    {
+                        imageView = renderPassResource->m_attachmentDic[attribute.attachmentIndex].m_imageView;
+                    }
+
+                    SamplerResource* samplerResource = s_samplerHandlePool.FetchResource(attribute.sampler.id);
+
+                    vk::DescriptorImageInfo imageInfo = {};
+                    imageInfo.setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal);
+                    imageInfo.setSampler(samplerResource->m_sampler);
+                    imageInfo.setImageView(imageView);
+
+                    vk::WriteDescriptorSet writeDescriptorSet = {};
+                    writeDescriptorSet.setDescriptorCount(1);
+                    writeDescriptorSet.setPImageInfo(&imageInfo);
+                    writeDescriptorSet.setDstBinding(attribute.binding);
+                    writeDescriptorSet.setDstArrayElement(0);
+                    writeDescriptorSet.setDstSet(m_descriptorSets[i]);
+                    writeDescriptorSet.setDescriptorType(vk::DescriptorType::eInputAttachment);
 
                     s_device.updateDescriptorSets(writeDescriptorSet, nullptr);
                 }
@@ -2178,9 +2213,19 @@ namespace GFX
         texturePoolSize.setType(vk::DescriptorType::eSampledImage);
         texturePoolSize.setDescriptorCount(200);
 
+        vk::DescriptorPoolSize inputAttachmentPoolSize = {};
+        inputAttachmentPoolSize.setType(vk::DescriptorType::eInputAttachment);
+        inputAttachmentPoolSize.setDescriptorCount(30);
+
+        vk::DescriptorPoolSize combinedImageSamplerPoolSize = {};
+        combinedImageSamplerPoolSize.setType(vk::DescriptorType::eCombinedImageSampler);
+        combinedImageSamplerPoolSize.setDescriptorCount(200);
+
         std::vector<vk::DescriptorPoolSize> sizes;
         sizes.push_back(uniformmBufferPoolSize);
         sizes.push_back(texturePoolSize);
+        sizes.push_back(inputAttachmentPoolSize);
+        sizes.push_back(combinedImageSamplerPoolSize);
 
         vk::DescriptorPoolCreateInfo poolCreateInfo = {};
         poolCreateInfo.setPoolSizeCount(sizes.size());
@@ -2297,8 +2342,10 @@ namespace GFX
         {
         case UniformType::UniformBuffer:
             return vk::DescriptorType::eUniformBuffer;
-        case UniformType::Sampler:
+        case UniformType::SampledImage:
             return vk::DescriptorType::eCombinedImageSampler;
+        case UniformType::InputAttachment:
+            return vk::DescriptorType::eInputAttachment;
         }
     }
 

@@ -167,7 +167,8 @@ namespace GFX
     enum class ImageUsage
     {
         SampledImage,
-        AttachmentImage
+        ColorAttachment,
+        DepthStencilAttachment,
     };
 
     enum class ImageSampleCount
@@ -424,7 +425,8 @@ namespace GFX
     enum class UniformType
     {
         UniformBuffer,
-        Sampler
+        SampledImage,
+        InputAttachment,
     };
 
     struct UniformLayoutDescription
@@ -487,6 +489,14 @@ namespace GFX
         Sampler sampler;
     };
 
+    struct UniformAttachmentAttribute
+    {
+        uint32_t binding;
+        RenderPass renderPass;
+        uint32_t attachmentIndex;
+        Sampler sampler;
+    };
+
     struct UniformDescription
     {
         void AddBufferAttribute(uint32_t binding, Buffer buffer, size_t offset, size_t range)
@@ -510,6 +520,17 @@ namespace GFX
             m_imageAttributes.push_back(attr);
         }
 
+        void AddAttachmentAttribute(uint32_t binding, RenderPass renderPass, uint32_t attachmentIndex, Sampler sampler)
+        {
+            UniformAttachmentAttribute attr = {};
+            attr.binding = binding;
+            attr.renderPass = renderPass;
+            attr.attachmentIndex = attachmentIndex;
+            attr.sampler = sampler;
+
+            m_attachmentAttributes.push_back(attr);
+        }
+
         void SetUniformLayout(UniformLayout layout)
         {
             m_layout = layout;
@@ -524,6 +545,7 @@ namespace GFX
         UniformStorageMode m_storageMode;
         std::vector<UniformBufferAtrribute> m_bufferAtrributes;
         std::vector<UniformImageAttribute> m_imageAttributes;
+        std::vector<UniformAttachmentAttribute> m_attachmentAttributes;
     };
 
     struct Uniform
@@ -540,6 +562,7 @@ namespace GFX
         RenderPass renderPass;
         bool enableDepthTest = false;
         bool enableStencilTest = false;
+        uint32_t subpass = 0;
     };
 
     struct Pipeline

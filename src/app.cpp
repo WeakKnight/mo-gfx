@@ -31,6 +31,9 @@ static GFX::Image image;
 static GFX::Sampler sampler;
 static GFX::RenderPass renderPass;
 
+static GFX::UniformLayout screenQuadUniformLayout;
+static GFX::Uniform screenQuadUniform;
+
 static GFX::Pipeline screenQuadPipeline;
 
 struct Vertex
@@ -146,7 +149,7 @@ void App::Init()
 	GFX::UniformLayoutDescription uniformLayoutDesc = {};
 	uniformLayoutDesc.AddUniformBinding(0, GFX::UniformType::UniformBuffer, GFX::ShaderStage::Vertex, 1);
 	uniformLayoutDesc.AddUniformBinding(1, GFX::UniformType::UniformBuffer, GFX::ShaderStage::Vertex, 1);
-	uniformLayoutDesc.AddUniformBinding(2, GFX::UniformType::Sampler, GFX::ShaderStage::Fragment, 1);
+	uniformLayoutDesc.AddUniformBinding(2, GFX::UniformType::SampledImage, GFX::ShaderStage::Fragment, 1);
 
 	uniformLayout = GFX::CreateUniformLayout(uniformLayoutDesc);
 
@@ -163,6 +166,7 @@ void App::Init()
 	pipelineDesc.uniformBindings = uniformBindings;
 	pipelineDesc.renderPass = renderPass;
 	pipelineDesc.enableDepthTest = true;
+	pipelineDesc.subpass = 0;
 
 	pipeline = GFX::CreatePipeline(pipelineDesc);
 
@@ -179,12 +183,22 @@ void App::Init()
 	screenVertShader = GFX::CreateShader(screenQuadVertDesc);
 	screenFragShader = GFX::CreateShader(screenQuadFragDesc);
 
+	GFX::UniformLayoutDescription screenQuadUniformLayoutDesc = {};
+	screenQuadUniformLayoutDesc.AddUniformBinding(0, GFX::UniformType::InputAttachment, GFX::ShaderStage::Fragment, 1);
+
+	screenQuadUniformLayout = GFX::CreateUniformLayout(screenQuadUniformLayoutDesc);
+
+	GFX::UniformBindings screenQuadUniformBindings = {};
+	screenQuadUniformBindings.AddUniformLayout(screenQuadUniformLayout);
+
 	GFX::GraphicsPipelineDescription screenQuadPipelineDesc = {};
 	screenQuadPipelineDesc.primitiveTopology = GFX::PrimitiveTopology::TriangleList;
 	screenQuadPipelineDesc.renderPass = renderPass;
 	screenQuadPipelineDesc.shaders.push_back(screenVertShader);
 	screenQuadPipelineDesc.shaders.push_back(screenFragShader);
 	screenQuadPipelineDesc.enableDepthTest = false;
+	screenQuadPipelineDesc.uniformBindings = screenQuadUniformBindings;
+	screenQuadPipelineDesc.subpass = 1;
 
 	screenQuadPipeline = GFX::CreatePipeline(screenQuadPipelineDesc);
 
@@ -212,6 +226,13 @@ void App::Init()
 	uniformDesc.AddImageAttribute(2, image, sampler);
 
 	uniform = GFX::CreateUniform(uniformDesc);
+
+	GFX::UniformDescription screenQuadUniformDesc = {};
+	screenQuadUniformDesc.SetUniformLayout(screenQuadUniformLayout);
+	screenQuadUniformDesc.SetStorageMode(GFX::UniformStorageMode::Dynamic);
+	screenQuadUniformDesc.AddAttachmentAttribute(0, renderPass, 1, sampler);
+
+	screenQuadUniform = GFX::CreateUniform(screenQuadUniformDesc);
 }
 
 void App::CreateRenderPass()
@@ -229,6 +250,14 @@ void App::CreateRenderPass()
 	swapChainAttachment.loadAction = GFX::AttachmentLoadAction::Clear;
 	swapChainAttachment.storeAction = GFX::AttachmentStoreAction::Store;
 
+	GFX::AttachmentDescription hdrAttachment = {};
+	hdrAttachment.format = GFX::Format::R16G16B16A16F;
+	hdrAttachment.width = s_width;
+	hdrAttachment.height = s_height;
+	hdrAttachment.type = GFX::AttachmentType::Color;
+	hdrAttachment.loadAction = GFX::AttachmentLoadAction::Clear;
+	hdrAttachment.storeAction = GFX::AttachmentStoreAction::DontCare;
+
 	GFX::AttachmentDescription depthAttachment = {};
 	depthAttachment.format = GFX::Format::DEPTH_24UNORM_STENCIL_8INT;
 	depthAttachment.width = s_width;
@@ -238,23 +267,34 @@ void App::CreateRenderPass()
 
 	// attachment 0, swap chain
 	renderPassDescription.attachments.push_back(swapChainAttachment);
-	// attachment 1, depth
+	// attachment 1, hdr
+	renderPassDescription.attachments.push_back(hdrAttachment);
+	// attachment 2, depth
 	renderPassDescription.attachments.push_back(depthAttachment);
+
+	GFX::SubPassDescription subPassHdr = {};
+	subPassHdr.pipelineType = GFX::PipelineType::Graphics;
+	subPassHdr.colorAttachments.push_back(1);
+	subPassHdr.SetDepthStencilAttachment(2);
 
 	GFX::SubPassDescription subPassSwapChain = {};
 	subPassSwapChain.pipelineType = GFX::PipelineType::Graphics;
 	subPassSwapChain.colorAttachments.push_back(0);
-	subPassSwapChain.SetDepthStencilAttachment(1);
+	subPassSwapChain.inputAttachments.push_back(1);
+	subPassSwapChain.SetDepthStencilAttachment(2);
 
+	renderPassDescription.subpasses.push_back(subPassHdr);
 	renderPassDescription.subpasses.push_back(subPassSwapChain);
 
-	/*GFX::DependencyDescription dependencyDesc = {};
+	GFX::DependencyDescription dependencyDesc = {};
 	dependencyDesc.srcSubpass = 0;
 	dependencyDesc.dstSubpass = 1;
 	dependencyDesc.srcStage = GFX::PipelineStage::ColorAttachmentOutput;
 	dependencyDesc.dstStage = GFX::PipelineStage::FragmentShader;
 	dependencyDesc.srcAccess = GFX::Access::ColorAttachmentWrite;
-	dependencyDesc.dstAccess = GFX::Access::ShaderRead;*/
+	dependencyDesc.dstAccess = GFX::Access::ShaderRead;
+
+	renderPassDescription.dependencies.push_back(dependencyDesc);
 
 	renderPass = GFX::CreateRenderPass(renderPassDescription);
 }
@@ -310,7 +350,10 @@ void App::MainLoop()
 
 			GFX::DrawIndexed(indices.size(), 1, 0);
 
+			GFX::NextRenderPass();
+
 			GFX::ApplyPipeline(screenQuadPipeline);
+			GFX::BindUniform(screenQuadUniform, 0);
 			GFX::Draw(3, 1, 0, 0);
 
 			GFX::EndRenderPass();
@@ -329,6 +372,9 @@ void App::CleanUp()
 
 	GFX::DestroyUniform(uniform);
 	GFX::DestroyUniformLayout(uniformLayout);
+
+	GFX::DestroyUniform(screenQuadUniform);
+	GFX::DestroyUniformLayout(screenQuadUniformLayout);
 
 	GFX::DestroyBuffer(vertexBuffer);
 	GFX::DestroyBuffer(indexBuffer);
