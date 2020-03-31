@@ -20,20 +20,20 @@ void InitEnvironment(char** args)
 
 	std::string environmentPath = "";
 
-	for (int i = 0; i < tokens.size() - 1; i++)
+	for (int i = 0; i < tokens.size() - 2; i++)
 	{
 		environmentPath += (tokens[i] + "\\");
 	}
-	environmentPath += "assets\\";
+	environmentPath += "samples\\assets\\";
 
 	_chdir(environmentPath.c_str());
 #else
 	auto tokens = StringUtils::Split(path, "/");
-	for (int i = 0; i < tokens.size() - 1; i++)
+	for (int i = 0; i < tokens.size() - 2; i++)
 	{
 		environmentPath += (tokens[i] + "/");
 	}
-	environmentPath += "assets/";
+	environmentPath += "samples/assets/";
 
 	chdir(environmentPath.c_str());
 #endif

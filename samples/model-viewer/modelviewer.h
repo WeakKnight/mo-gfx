@@ -1,7 +1,7 @@
 #pragma once
 #include "app.h"
 
-class MultiPassExample : public App
+class ModelViewerExample : public App
 {
 private:
 	void Init() override;

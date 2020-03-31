@@ -166,7 +166,7 @@ void CreateRenderPass()
 void LoadTexture()
 {
 	int texWidth, texHeight, texChannels;
-	stbi_uc* pixels = stbi_load("texture.jpg", &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+	stbi_uc* pixels = stbi_load("multi-pass/texture.jpg", &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
 
 	GFX::ImageDescription imageDescription = {};
 	imageDescription.format = GFX::Format::R8G8B8A8;
@@ -226,12 +226,12 @@ void MultiPassExample::Init()
 
 	GFX::ShaderDescription vertDesc = {};
 	vertDesc.name = "default";
-	vertDesc.codes = StringUtils::ReadFile("default.vert");
+	vertDesc.codes = StringUtils::ReadFile("multi-pass/default.vert");
 	vertDesc.stage = GFX::ShaderStage::Vertex;
 
 	GFX::ShaderDescription fragDesc = {};
 	fragDesc.name = "default";
-	fragDesc.codes = StringUtils::ReadFile("default.frag");
+	fragDesc.codes = StringUtils::ReadFile("multi-pass/default.frag");
 	fragDesc.stage = GFX::ShaderStage::Fragment;
 
 	vertShader = GFX::CreateShader(vertDesc);
@@ -271,12 +271,12 @@ void MultiPassExample::Init()
 
 	GFX::ShaderDescription screenQuadVertDesc = {};
 	screenQuadVertDesc.name = "default";
-	screenQuadVertDesc.codes = StringUtils::ReadFile("screen_quad.vert");
+	screenQuadVertDesc.codes = StringUtils::ReadFile("multi-pass/screen_quad.vert");
 	screenQuadVertDesc.stage = GFX::ShaderStage::Vertex;
 
 	GFX::ShaderDescription screenQuadFragDesc = {};
 	screenQuadFragDesc.name = "default";
-	screenQuadFragDesc.codes = StringUtils::ReadFile("screen_quad_test.frag");
+	screenQuadFragDesc.codes = StringUtils::ReadFile("multi-pass/screen_quad_test.frag");
 	screenQuadFragDesc.stage = GFX::ShaderStage::Fragment;
 
 	screenVertShader = GFX::CreateShader(screenQuadVertDesc);

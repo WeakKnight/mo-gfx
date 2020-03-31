@@ -34,4 +34,14 @@ target_link_libraries("multi-pass" spdlog glfw ${GLFW_LIBRARIES} glm mo-gfx)
 
 set_property(TARGET "multi-pass" PROPERTY FOLDER "mo-gfx-samples")
 
+#ModelViewer Example
+file(GLOB MODELVIEWER_HEADERS "./include/*.h" "./model-viewer/*.h")
+file(GLOB MODELVIEWER_SOURCES "./src/*.cpp" "./model-viewer/*.cpp")
+
+add_executable("model-viewer" ${MODELVIEWER_SOURCES} ${MODELVIEWER_HEADERS})
+target_link_libraries("model-viewer" spdlog glfw ${GLFW_LIBRARIES} glm mo-gfx)
+
+set_property(TARGET "model-viewer" PROPERTY FOLDER "mo-gfx-samples")
+
+
 
