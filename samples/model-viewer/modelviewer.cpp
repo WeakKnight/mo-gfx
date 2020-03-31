@@ -1,4 +1,5 @@
 #include "modelviewer.h"
+#include "spdlog/spdlog.h"
 
 int main(int, char** args)
 {
@@ -14,7 +15,7 @@ int main(int, char** args)
 
 void ModelViewerExample::Init()
 {
-
+	spdlog::info("Hello Model Viewer");
 }
 
 void ModelViewerExample::MainLoop()

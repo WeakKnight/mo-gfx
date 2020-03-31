@@ -51,6 +51,8 @@ namespace GFX
     static vk::PhysicalDeviceProperties s_physicalDeviceProperties;
     static vk::Device s_device = nullptr;
 
+    static ktxVulkanDeviceInfo s_ktx_device_info;
+
     static VkSurfaceKHR s_surface = nullptr;
 
     /*
@@ -1189,6 +1191,33 @@ namespace GFX
             m_imageView = CreateVulkanImageView(m_image, m_format, vk::ImageAspectFlagBits::eColor);
         }
 
+        ImageResource(const char* path)
+        {
+            ktxResult result;
+            ktxTexture* ktxTexture;
+
+            result = ktxTexture_CreateFromNamedFile(path, KTX_TEXTURE_CREATE_LOAD_IMAGE_DATA_BIT, &ktxTexture);
+            assert(result == KTX_SUCCESS);
+
+            m_width = ktxTexture->baseWidth;
+            m_height = ktxTexture->baseHeight;
+            m_depth = ktxTexture->baseDepth;
+
+ /*           ktx_uint8_t* ktxTextureData = ktxTexture_GetData(ktxTexture);
+            ktx_size_t ktxTextureSize = ktxTexture_GetSize(ktxTexture);
+
+            vk::MemoryAllocateInfo memAllocateInfo = {};
+            vk::MemoryRequirements memReqs = {};
+
+            vk::Buffer stagingBuffer = {};
+            vk::DeviceMemory stagingMemory = {};
+            
+            vk::BufferCreateInfo bufferCreateInfo = {};
+            bufferCreateInfo.setSize(ktxTextureSize);
+            bufferCreateInfo.setUsage(vk::BufferUsageFlagBits::eTransferSrc);
+            bufferCreateInfo.setSharingMode(vk::SharingMode::eExclusive);*/
+        }
+
         ~ImageResource()
         {
             s_device.waitIdle();
@@ -1459,6 +1488,18 @@ namespace GFX
         Image result = Image();
 
         ImageResource* imageResource = new ImageResource(desc);
+        result.id = s_imageHandlePool.AllocateHandle(imageResource);
+
+        imageResource->handle = result.id;
+
+        return result;
+    }
+
+    Image CreateImageFromKtxTexture(const char* path)
+    {
+        Image result = Image();
+        
+        ImageResource* imageResource = new ImageResource(path);
         result.id = s_imageHandlePool.AllocateHandle(imageResource);
 
         imageResource->handle = result.id;
@@ -1826,11 +1867,10 @@ namespace GFX
 
         CreateSwapChain();
         CreateImageViews();
-        // CreateDefaultRenderPass();
      
         CreateCommandPoolDefault();
-        // CreateDepthImage();
-        // CreateSwapChainFramebuffers();
+
+        ktxVulkanDeviceInfo_Construct(&s_ktx_device_info, s_physicalDevice, s_device, s_graphicsQueueDefault, s_commandPoolDefault, nullptr);
 
         CreateCommandBuffersDefault();
         CreateSyncObjects();
@@ -1982,6 +2022,8 @@ namespace GFX
     {
         s_device.waitIdle();
 
+        ktxVulkanDeviceInfo_Destruct(&s_ktx_device_info);
+
         s_device.destroyDescriptorPool(s_descriptorPoolDefault);
 
         for (auto fence : s_inFlightFences)
@@ -2001,21 +2043,10 @@ namespace GFX
 
         s_device.destroyCommandPool(s_commandPoolDefault);
 
-       /* for (auto framebuffer : s_swapChainFrameBuffers)
-        {
-            vkDestroyFramebuffer(s_device, framebuffer, nullptr);
-        }*/
-
-     /*   s_device.destroyRenderPass(s_renderPassDefault);*/
-
         for (auto imageView : s_swapChainImageViews)
         {
             vkDestroyImageView(s_device, imageView, nullptr);
         }
-
-      /*  s_device.destroyImageView(s_depthImageView);
-        s_device.destroyImage(s_depthImage);
-        s_device.freeMemory(s_depthImageMemory);*/
 
         vkDestroySwapchainKHR(s_device, s_swapChain, nullptr);
         vkDestroySurfaceKHR(s_instance, s_surface, nullptr);
@@ -2030,75 +2061,6 @@ namespace GFX
             s_swapChainImageViews.push_back(CreateVulkanImageView(s_swapChainImages[i], s_swapChainImageFormat, vk::ImageAspectFlagBits::eColor));
         }
     }
-
-  /*  void CreateDepthImage()
-    {
-        vk::Format depthFormat = FindDepthFormat();
-        CreateVulkanImage(s_swapChainImageExtent.width, s_swapChainImageExtent.height, 
-            depthFormat, 
-            vk::ImageTiling::eOptimal, 
-            vk::ImageUsageFlagBits::eDepthStencilAttachment, 
-            vk::MemoryPropertyFlagBits::eDeviceLocal, 
-            s_depthImage, 
-            s_depthImageMemory);
-
-        vk::ImageAspectFlags targetAspect = vk::ImageAspectFlagBits::eDepth;
-        if (HasStencilComponent(depthFormat))
-        {
-            targetAspect = vk::ImageAspectFlagBits::eDepth | vk::ImageAspectFlagBits::eStencil;
-        }
-
-        s_depthImageView = CreateVulkanImageView(s_depthImage, depthFormat, targetAspect);
-        TransitionImageLayout(s_depthImage, depthFormat, vk::ImageLayout::eUndefined, vk::ImageLayout::eDepthStencilAttachmentOptimal);
-    }*/
-
-    /*void CreateDefaultRenderPass()
-    {
-        vk::AttachmentDescription colorAttachment = {};
-        colorAttachment.setFormat(s_swapChainImageFormat);
-        colorAttachment.setSamples(vk::SampleCountFlagBits::e1);
-        colorAttachment.setLoadOp(vk::AttachmentLoadOp::eClear);
-        colorAttachment.setStoreOp(vk::AttachmentStoreOp::eStore);
-        colorAttachment.setStencilLoadOp(vk::AttachmentLoadOp::eDontCare);
-        colorAttachment.setInitialLayout(vk::ImageLayout::eUndefined);
-        colorAttachment.setFinalLayout(vk::ImageLayout::ePresentSrcKHR);
-
-        vk::AttachmentDescription depthAttachment = {};
-        depthAttachment.setFormat(FindDepthFormat());
-        depthAttachment.setSamples(vk::SampleCountFlagBits::e1);
-        depthAttachment.setLoadOp(vk::AttachmentLoadOp::eClear);
-        depthAttachment.setStoreOp(vk::AttachmentStoreOp::eDontCare);
-        depthAttachment.setStencilLoadOp(vk::AttachmentLoadOp::eDontCare);
-        depthAttachment.setStencilStoreOp(vk::AttachmentStoreOp::eDontCare);
-        depthAttachment.setInitialLayout(vk::ImageLayout::eUndefined);
-        depthAttachment.setFinalLayout(vk::ImageLayout::eDepthStencilAttachmentOptimal);
-
-        vk::AttachmentReference colorAttachmentRef = {};
-        colorAttachmentRef.setAttachment(0);
-        colorAttachmentRef.setLayout(vk::ImageLayout::eColorAttachmentOptimal);
-
-        vk::AttachmentReference depthAttachmentRef = {};
-        depthAttachmentRef.setAttachment(1);
-        depthAttachmentRef.setLayout(vk::ImageLayout::eDepthStencilAttachmentOptimal);
-
-        vk::SubpassDescription subpassDescription = {};
-        subpassDescription.setPipelineBindPoint(vk::PipelineBindPoint::eGraphics);
-        subpassDescription.setColorAttachmentCount(1);
-        subpassDescription.setPColorAttachments(&colorAttachmentRef);
-        subpassDescription.setPDepthStencilAttachment(&depthAttachmentRef);
-
-        std::vector<vk::AttachmentDescription> attachments = { colorAttachment, depthAttachment };
-
-        vk::RenderPassCreateInfo renderPassCreateInfo = {};
-        renderPassCreateInfo.setAttachmentCount(attachments.size());
-        renderPassCreateInfo.setPAttachments(attachments.data());
-        renderPassCreateInfo.setSubpassCount(1);
-        renderPassCreateInfo.setPSubpasses(&subpassDescription);
-        
-        auto createRenderPassResult = s_device.createRenderPass(renderPassCreateInfo);
-        VK_ASSERT(createRenderPassResult);
-        s_renderPassDefault = createRenderPassResult.value;
-    }*/
 
     void CreateSwapChain()
     {

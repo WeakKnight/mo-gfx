@@ -4,6 +4,8 @@
 #include <vector>
 #include <memory>
 #include <list>
+#include "ktx.h"
+#include "ktxvulkan.h"
 
 struct GLFWwindow;
 
@@ -598,6 +600,8 @@ namespace GFX
     Sampler CreateSampler(const SamplerDescription& desc);
     UniformLayout CreateUniformLayout(const UniformLayoutDescription& desc);
     Uniform CreateUniform(const UniformDescription& desc);
+
+    Image CreateImageFromKtxTexture(const char* path);
     
     void DestroyShader(const Shader& shader);
     void DestroyPipeline(const Pipeline& pipeline);

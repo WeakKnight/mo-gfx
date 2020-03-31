@@ -17,6 +17,7 @@ include_directories(
 	../include/
 	thirdparty/glm/
 	thirdparty/spdlog/include/
+	../thirdparty/ktx/include/
 )
 
 # Spdlog Building
@@ -39,7 +40,7 @@ file(GLOB MODELVIEWER_HEADERS "./include/*.h" "./model-viewer/*.h")
 file(GLOB MODELVIEWER_SOURCES "./src/*.cpp" "./model-viewer/*.cpp")
 
 add_executable("model-viewer" ${MODELVIEWER_SOURCES} ${MODELVIEWER_HEADERS})
-target_link_libraries("model-viewer" spdlog glfw ${GLFW_LIBRARIES} glm mo-gfx)
+target_link_libraries("model-viewer" spdlog glfw ${GLFW_LIBRARIES} glm mo-gfx ktx)
 
 set_property(TARGET "model-viewer" PROPERTY FOLDER "mo-gfx-samples")
 

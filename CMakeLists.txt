@@ -16,6 +16,7 @@ include_directories(
     thirdparty/vma/
     thirdparty/glfw/include/
     thirdparty/shaderc/libshaderc/include/
+    thirdparty/ktx/include/
 )
 
 # GLFW Building
@@ -31,8 +32,7 @@ add_subdirectory(thirdparty/shaderc)
 file(GLOB HEADERS "include/*.h")
 file(GLOB SOURCES "src/*.cpp")
 
-add_library(${LIB_NAME} ${SOURCES})
-# add_executable(${LIB_NAME} ${SOURCES} ${HEADERS})
+add_library(${LIB_NAME} ${SOURCES} ${HEADERS})
 target_link_libraries(${LIB_NAME} glfw ${GLFW_LIBRARIES} shaderc)
 
 find_package(Vulkan REQUIRED)
@@ -43,5 +43,9 @@ ENDIF()
 
 target_include_directories(${LIB_NAME} PRIVATE Vulkan::Vulkan)
 target_link_libraries(${LIB_NAME} Vulkan::Vulkan)
+
+# KTX Building
+add_subdirectory(thirdparty/ktx)
+target_link_libraries(${LIB_NAME} ktx)
 
 add_subdirectory(samples)
