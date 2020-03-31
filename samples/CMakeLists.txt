@@ -1,10 +1,8 @@
 cmake_minimum_required(VERSION 3.1)
-project(mo-gfx-samples)
 
-set(
-	BIN_NAME
-	"mo-gfx-samples"
-)
+set_property(GLOBAL PROPERTY USE_FOLDERS ON)
+
+project(mo-gfx-samples)
 
 # Set C++11
 set (CMAKE_CXX_STANDARD 11)
@@ -14,7 +12,7 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY $<1:${CMAKE_SOURCE_DIR}/bin>)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_DEBUG $<1:${CMAKE_SOURCE_DIR}/bin>)
 
 include_directories(
-    include/
+    ./include/
     ../thirdparty/glfw/include/
 	../include/
 	thirdparty/glm/
@@ -27,8 +25,13 @@ add_subdirectory(thirdparty/spdlog)
 # GLM Building
 add_subdirectory(thirdparty/glm)
 
-file(GLOB HEADERS "include/*.h")
-file(GLOB SOURCES "src/*.cpp")
+#Multipass Example
+file(GLOB MULTIPASS_HEADERS "./include/*.h" "./multi-pass/*.h")
+file(GLOB MULTIPASS_SOURCES "./src/*.cpp" "./multi-pass/*.cpp")
 
-add_executable(${BIN_NAME} ${SOURCES} ${HEADERS})
-target_link_libraries(${BIN_NAME} spdlog glfw ${GLFW_LIBRARIES} glm mo-gfx)
+add_executable("multi-pass" ${MULTIPASS_SOURCES} ${MULTIPASS_HEADERS})
+target_link_libraries("multi-pass" spdlog glfw ${GLFW_LIBRARIES} glm mo-gfx)
+
+set_property(TARGET "multi-pass" PROPERTY FOLDER "mo-gfx-samples")
+
+

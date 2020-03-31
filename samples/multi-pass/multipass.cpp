@@ -1,4 +1,4 @@
-#include "app.h"
+#include "multipass.h"
 #include <GLFW/glfw3.h>
 #include "spdlog/spdlog.h"
 #include "gfx.h"
@@ -66,13 +66,16 @@ struct UniformBufferObject
 	glm::mat4 proj;
 };
 
-void App::Run()
+int main(int, char** args)
 {
-	Init();
+	InitEnvironment(args);
 
-	MainLoop();
+	App* app = new MultiPassExample();
+	app->Run();
 
-	CleanUp();
+	delete app;
+
+	return 0;
 }
 
 static void framebufferResizeCallback(GLFWwindow* window, int width, int height) 
@@ -96,7 +99,92 @@ static void framebufferResizeCallback(GLFWwindow* window, int width, int height)
 	screenQuadUniform = GFX::CreateUniform(screenQuadUniformDesc);
 }
 
-void App::Init()
+void CreateRenderPass()
+{
+	// Render Pass
+	GFX::RenderPassDescription renderPassDescription = {};
+	renderPassDescription.width = s_width;
+	renderPassDescription.height = s_height;
+
+	GFX::AttachmentDescription swapChainAttachment = {};
+	swapChainAttachment.format = GFX::Format::SWAPCHAIN;
+	swapChainAttachment.width = s_width;
+	swapChainAttachment.height = s_height;
+	swapChainAttachment.type = GFX::AttachmentType::Present;
+	swapChainAttachment.loadAction = GFX::AttachmentLoadAction::Clear;
+	swapChainAttachment.storeAction = GFX::AttachmentStoreAction::Store;
+
+	GFX::AttachmentDescription hdrAttachment = {};
+	hdrAttachment.format = GFX::Format::R16G16B16A16F;
+	hdrAttachment.width = s_width;
+	hdrAttachment.height = s_height;
+	hdrAttachment.type = GFX::AttachmentType::Color;
+	hdrAttachment.loadAction = GFX::AttachmentLoadAction::Clear;
+	hdrAttachment.storeAction = GFX::AttachmentStoreAction::DontCare;
+
+	GFX::AttachmentDescription depthAttachment = {};
+	depthAttachment.format = GFX::Format::DEPTH_24UNORM_STENCIL_8INT;
+	depthAttachment.width = s_width;
+	depthAttachment.height = s_height;
+	depthAttachment.type = GFX::AttachmentType::DepthStencil;
+	depthAttachment.loadAction = GFX::AttachmentLoadAction::Clear;
+
+	// attachment 0, swap chain
+	renderPassDescription.attachments.push_back(swapChainAttachment);
+	// attachment 1, hdr
+	renderPassDescription.attachments.push_back(hdrAttachment);
+	// attachment 2, depth
+	renderPassDescription.attachments.push_back(depthAttachment);
+
+	GFX::SubPassDescription subPassHdr = {};
+	subPassHdr.pipelineType = GFX::PipelineType::Graphics;
+	subPassHdr.colorAttachments.push_back(1);
+	subPassHdr.SetDepthStencilAttachment(2);
+
+	GFX::SubPassDescription subPassSwapChain = {};
+	subPassSwapChain.pipelineType = GFX::PipelineType::Graphics;
+	subPassSwapChain.colorAttachments.push_back(0);
+	subPassSwapChain.inputAttachments.push_back(1);
+	subPassSwapChain.SetDepthStencilAttachment(2);
+
+	renderPassDescription.subpasses.push_back(subPassHdr);
+	renderPassDescription.subpasses.push_back(subPassSwapChain);
+
+	GFX::DependencyDescription dependencyDesc = {};
+	dependencyDesc.srcSubpass = 0;
+	dependencyDesc.dstSubpass = 1;
+	dependencyDesc.srcStage = GFX::PipelineStage::ColorAttachmentOutput;
+	dependencyDesc.dstStage = GFX::PipelineStage::FragmentShader;
+	dependencyDesc.srcAccess = GFX::Access::ColorAttachmentWrite;
+	dependencyDesc.dstAccess = GFX::Access::ShaderRead;
+
+	renderPassDescription.dependencies.push_back(dependencyDesc);
+
+	renderPass = GFX::CreateRenderPass(renderPassDescription);
+}
+
+void LoadTexture()
+{
+	int texWidth, texHeight, texChannels;
+	stbi_uc* pixels = stbi_load("texture.jpg", &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+
+	GFX::ImageDescription imageDescription = {};
+	imageDescription.format = GFX::Format::R8G8B8A8;
+	imageDescription.width = texWidth;
+	imageDescription.height = texHeight;
+	imageDescription.depth = 1;
+	imageDescription.readOrWriteByCPU = false;
+	imageDescription.usage = GFX::ImageUsage::SampledImage;
+	imageDescription.type = GFX::ImageType::Image2D;
+	imageDescription.sampleCount = GFX::ImageSampleCount::Sample1;
+
+	image = GFX::CreateImage(imageDescription);
+	GFX::UpdateImageMemory(image, pixels, sizeof(stbi_uc) * texWidth * texHeight * 4);
+
+	STBI_FREE(pixels);
+}
+
+void MultiPassExample::Init()
 {
 	glfwInit();
 
@@ -250,92 +338,7 @@ void App::Init()
 	screenQuadUniform = GFX::CreateUniform(screenQuadUniformDesc);
 }
 
-void App::CreateRenderPass()
-{
-	// Render Pass
-	GFX::RenderPassDescription renderPassDescription = {};
-	renderPassDescription.width = s_width;
-	renderPassDescription.height = s_height;
-
-	GFX::AttachmentDescription swapChainAttachment = {};
-	swapChainAttachment.format = GFX::Format::SWAPCHAIN;
-	swapChainAttachment.width = s_width;
-	swapChainAttachment.height = s_height;
-	swapChainAttachment.type = GFX::AttachmentType::Present;
-	swapChainAttachment.loadAction = GFX::AttachmentLoadAction::Clear;
-	swapChainAttachment.storeAction = GFX::AttachmentStoreAction::Store;
-
-	GFX::AttachmentDescription hdrAttachment = {};
-	hdrAttachment.format = GFX::Format::R16G16B16A16F;
-	hdrAttachment.width = s_width;
-	hdrAttachment.height = s_height;
-	hdrAttachment.type = GFX::AttachmentType::Color;
-	hdrAttachment.loadAction = GFX::AttachmentLoadAction::Clear;
-	hdrAttachment.storeAction = GFX::AttachmentStoreAction::DontCare;
-
-	GFX::AttachmentDescription depthAttachment = {};
-	depthAttachment.format = GFX::Format::DEPTH_24UNORM_STENCIL_8INT;
-	depthAttachment.width = s_width;
-	depthAttachment.height = s_height;
-	depthAttachment.type = GFX::AttachmentType::DepthStencil;
-	depthAttachment.loadAction = GFX::AttachmentLoadAction::Clear;
-
-	// attachment 0, swap chain
-	renderPassDescription.attachments.push_back(swapChainAttachment);
-	// attachment 1, hdr
-	renderPassDescription.attachments.push_back(hdrAttachment);
-	// attachment 2, depth
-	renderPassDescription.attachments.push_back(depthAttachment);
-
-	GFX::SubPassDescription subPassHdr = {};
-	subPassHdr.pipelineType = GFX::PipelineType::Graphics;
-	subPassHdr.colorAttachments.push_back(1);
-	subPassHdr.SetDepthStencilAttachment(2);
-
-	GFX::SubPassDescription subPassSwapChain = {};
-	subPassSwapChain.pipelineType = GFX::PipelineType::Graphics;
-	subPassSwapChain.colorAttachments.push_back(0);
-	subPassSwapChain.inputAttachments.push_back(1);
-	subPassSwapChain.SetDepthStencilAttachment(2);
-
-	renderPassDescription.subpasses.push_back(subPassHdr);
-	renderPassDescription.subpasses.push_back(subPassSwapChain);
-
-	GFX::DependencyDescription dependencyDesc = {};
-	dependencyDesc.srcSubpass = 0;
-	dependencyDesc.dstSubpass = 1;
-	dependencyDesc.srcStage = GFX::PipelineStage::ColorAttachmentOutput;
-	dependencyDesc.dstStage = GFX::PipelineStage::FragmentShader;
-	dependencyDesc.srcAccess = GFX::Access::ColorAttachmentWrite;
-	dependencyDesc.dstAccess = GFX::Access::ShaderRead;
-
-	renderPassDescription.dependencies.push_back(dependencyDesc);
-
-	renderPass = GFX::CreateRenderPass(renderPassDescription);
-}
-
-void App::LoadTexture()
-{
-	int texWidth, texHeight, texChannels;
-	stbi_uc* pixels = stbi_load("texture.jpg", &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
-
-	GFX::ImageDescription imageDescription = {};
-	imageDescription.format = GFX::Format::R8G8B8A8;
-	imageDescription.width = texWidth;
-	imageDescription.height = texHeight;
-	imageDescription.depth = 1;
-	imageDescription.readOrWriteByCPU = false;
-	imageDescription.usage = GFX::ImageUsage::SampledImage;
-	imageDescription.type = GFX::ImageType::Image2D;
-	imageDescription.sampleCount = GFX::ImageSampleCount::Sample1;
-
-	image = GFX::CreateImage(imageDescription);
-	GFX::UpdateImageMemory(image, pixels, sizeof(stbi_uc) * texWidth * texHeight * 4);
-
-	STBI_FREE(pixels);
-}
-
-void App::MainLoop()
+void MultiPassExample::MainLoop()
 {
 	while (!glfwWindowShouldClose(m_window)) 
 	{
@@ -378,7 +381,7 @@ void App::MainLoop()
 	}
 }
 
-void App::CleanUp()
+void MultiPassExample::CleanUp()
 {
 	GFX::DestroyRenderPass(renderPass);
 

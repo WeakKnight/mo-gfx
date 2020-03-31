@@ -1,4 +1,5 @@
-#include "app.h"
+#include "common.h"
+
 #include "string_utils.h"
 #ifdef _WIN32
 #include <direct.h>
@@ -9,7 +10,7 @@
 #include "spdlog/spdlog.h"
 #include "spdlog/sinks/basic_file_sink.h"
 
-int main(int, char** args)
+void InitEnvironment(char** args)
 {
 	auto path = args[0];
 
@@ -38,9 +39,4 @@ int main(int, char** args)
 #endif
 
 	spdlog::info("Environment Path Is {}", environmentPath);
-
-    App app = App();
-    app.Run();
-
-    return 0;
 }

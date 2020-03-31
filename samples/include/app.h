@@ -6,16 +6,29 @@ struct GLFWwindow;
 class App
 {
 public:
-	void Run();
+	void Run() 
+	{
+		Init();
+
+		MainLoop();
+
+		CleanUp();
+	}
 
 private:
-	void Init();
-	void MainLoop();
-	void CleanUp();
+	virtual void Init()
+	{
+	}
 
-	void CreateRenderPass();
-	void LoadTexture();
+	virtual void MainLoop()
+	{
+	}
 
-private:
+	virtual void CleanUp()
+	{
+	}
+
+protected:
 	GLFWwindow* m_window = nullptr;
 };
+
