@@ -218,6 +218,7 @@ namespace GFX
     vk::ShaderStageFlagBits MapShaderStageForVulkan(const ShaderStage& stage);
     vk::DescriptorType MapUniformTypeForVulkan(const UniformType& uniformType);
     vk::Filter MapFilterForVulkan(const FilterMode& filterMode);
+    vk::SamplerMipmapMode MapMipmapFilterForVulkan(const FilterMode& filterMode);
     vk::SamplerAddressMode MapWrapModeForVulkan(const WrapMode& wrapMode);
     vk::BorderColor MapBorderColorForVulkan(const BorderColor& borderColor);
     vk::SampleCountFlagBits MapSampleCountForVulkan(const ImageSampleCount& sampleCount);
@@ -1108,10 +1109,10 @@ namespace GFX
 
             samplerCreateInfo.setCompareEnable(false);
 
-            samplerCreateInfo.setMipmapMode(vk::SamplerMipmapMode::eLinear);
+            samplerCreateInfo.setMipmapMode(MapMipmapFilterForVulkan(desc.mipmapFilter));
             samplerCreateInfo.setMipLodBias(0.0f);
             samplerCreateInfo.setMinLod(0.0f);
-            samplerCreateInfo.setMaxLod(0.0f);
+            samplerCreateInfo.setMaxLod(desc.maxLod);
 
             auto createSamplerResult = s_device.createSampler(samplerCreateInfo);
             VK_ASSERT(createSamplerResult);
@@ -1193,29 +1194,34 @@ namespace GFX
 
         ImageResource(const char* path)
         {
+            assert(!ktxInitialized);
+
             ktxResult result;
             ktxTexture* ktxTexture;
 
             result = ktxTexture_CreateFromNamedFile(path, KTX_TEXTURE_CREATE_LOAD_IMAGE_DATA_BIT, &ktxTexture);
             assert(result == KTX_SUCCESS);
 
-            m_width = ktxTexture->baseWidth;
-            m_height = ktxTexture->baseHeight;
-            m_depth = ktxTexture->baseDepth;
+            result = ktxTexture_VkUploadEx(ktxTexture, &s_ktx_device_info, &ktxVulkanTexture, VkImageTiling::VK_IMAGE_TILING_OPTIMAL, VkImageUsageFlagBits::VK_IMAGE_USAGE_SAMPLED_BIT, VkImageLayout::VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+           
+            assert(result == KTX_SUCCESS);
 
- /*           ktx_uint8_t* ktxTextureData = ktxTexture_GetData(ktxTexture);
-            ktx_size_t ktxTextureSize = ktxTexture_GetSize(ktxTexture);
+            m_deviceMemory = ktxVulkanTexture.deviceMemory;
+            m_image = ktxVulkanTexture.image;
 
-            vk::MemoryAllocateInfo memAllocateInfo = {};
-            vk::MemoryRequirements memReqs = {};
+            vk::ImageViewCreateInfo viewInfo;
+            // Set the non-default values.
+            viewInfo.image = ktxVulkanTexture.image;
+            viewInfo.format = static_cast<vk::Format>(ktxVulkanTexture.imageFormat);
+            viewInfo.viewType = static_cast<vk::ImageViewType>(ktxVulkanTexture.viewType);
+            viewInfo.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eColor;
+            viewInfo.subresourceRange.layerCount = ktxVulkanTexture.layerCount;
+            viewInfo.subresourceRange.levelCount = ktxVulkanTexture.levelCount;
 
-            vk::Buffer stagingBuffer = {};
-            vk::DeviceMemory stagingMemory = {};
-            
-            vk::BufferCreateInfo bufferCreateInfo = {};
-            bufferCreateInfo.setSize(ktxTextureSize);
-            bufferCreateInfo.setUsage(vk::BufferUsageFlagBits::eTransferSrc);
-            bufferCreateInfo.setSharingMode(vk::SharingMode::eExclusive);*/
+            auto createImageViewResult = s_device.createImageView(viewInfo);
+            VK_ASSERT(createImageViewResult);
+
+            m_imageView = createImageViewResult.value;
         }
 
         ~ImageResource()
@@ -1262,11 +1268,14 @@ namespace GFX
 
         uint32_t m_memSize = 0;
 
-        vk::Format m_format;
+        vk::Format m_format = vk::Format::eR8G8B8A8Snorm;
 
         vk::DeviceMemory m_deviceMemory = nullptr;
         vk::Image m_image = nullptr;
         vk::ImageView m_imageView = nullptr;
+
+        ktxVulkanTexture ktxVulkanTexture;
+        bool ktxInitialized = false;
     };
 
     struct UniformResource
@@ -2357,6 +2366,20 @@ namespace GFX
         default:
             assert(false);
             return vk::Filter::eCubicIMG;
+        }
+    }
+
+    vk::SamplerMipmapMode MapMipmapFilterForVulkan(const FilterMode& filterMode)
+    {
+        switch (filterMode)
+        {
+        case FilterMode::Linear:
+            return vk::SamplerMipmapMode::eLinear;
+        case FilterMode::Nearest:
+            return vk::SamplerMipmapMode::eNearest;
+        default:
+            assert(false);
+            return vk::SamplerMipmapMode::eLinear;
         }
     }
 

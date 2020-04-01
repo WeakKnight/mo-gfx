@@ -164,6 +164,7 @@ namespace GFX
     enum class ImageType
     {
         Image2D,
+        Cube
     };
 
     enum class ImageUsage
@@ -227,9 +228,14 @@ namespace GFX
     {
         FilterMode minFilter = FilterMode::Linear;
         FilterMode magFilter = FilterMode::Linear;
+        FilterMode mipmapFilter = FilterMode::Linear;
+
         WrapMode wrapU = WrapMode::ClampToEdge;
         WrapMode wrapV = WrapMode::ClampToEdge;
         WrapMode wrapW = WrapMode::ClampToEdge;
+        
+        float maxLod = 10.0f;
+
         bool anisotropyEnable = false;
         int maxAnisotropy = 16;
         BorderColor borderColor = BorderColor::FloatOpaqueBlack;

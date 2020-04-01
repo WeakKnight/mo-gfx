@@ -164,24 +164,19 @@ void CreateRenderPass()
 }
 
 void LoadTexture()
-{
-	int texWidth, texHeight, texChannels;
-	stbi_uc* pixels = stbi_load("multi-pass/texture.jpg", &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+{	
+	image = GFX::CreateImageFromKtxTexture("multi-pass/metalplate01_rgba.ktx");
 
-	GFX::ImageDescription imageDescription = {};
-	imageDescription.format = GFX::Format::R8G8B8A8;
-	imageDescription.width = texWidth;
-	imageDescription.height = texHeight;
-	imageDescription.depth = 1;
-	imageDescription.readOrWriteByCPU = false;
-	imageDescription.usage = GFX::ImageUsage::SampledImage;
-	imageDescription.type = GFX::ImageType::Image2D;
-	imageDescription.sampleCount = GFX::ImageSampleCount::Sample1;
+	GFX::SamplerDescription samplerDesc = {};
+	samplerDesc.minFilter = GFX::FilterMode::Linear;
+	samplerDesc.magFilter = GFX::FilterMode::Linear;
+	samplerDesc.mipmapFilter = GFX::FilterMode::Linear;
+	samplerDesc.maxLod = 10.0f;
 
-	image = GFX::CreateImage(imageDescription);
-	GFX::UpdateImageMemory(image, pixels, sizeof(stbi_uc) * texWidth * texHeight * 4);
+	samplerDesc.wrapU = GFX::WrapMode::ClampToEdge;
+	samplerDesc.wrapV = GFX::WrapMode::ClampToEdge;
 
-	STBI_FREE(pixels);
+	sampler = GFX::CreateSampler(samplerDesc);
 }
 
 void MultiPassExample::Init()
@@ -306,14 +301,6 @@ void MultiPassExample::Init()
 	screenQuadPipeline = GFX::CreatePipeline(screenQuadPipelineDesc);
 
 	LoadTexture();
-
-	GFX::SamplerDescription samplerDesc = {};
-	samplerDesc.minFilter = GFX::FilterMode::Linear;
-	samplerDesc.magFilter = GFX::FilterMode::Linear;
-	samplerDesc.wrapU = GFX::WrapMode::ClampToEdge;
-	samplerDesc.wrapV = GFX::WrapMode::ClampToEdge;
-
-	sampler = GFX::CreateSampler(samplerDesc);
 
 	GFX::UniformDescription uniformDesc = {};
 	uniformDesc.SetUniformLayout(uniformLayout);
