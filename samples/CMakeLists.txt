@@ -17,6 +17,7 @@ include_directories(
 	../include/
 	thirdparty/glm/
 	thirdparty/spdlog/include/
+	thirdparty/assimp/include/
 	../thirdparty/ktx/include/
 )
 
@@ -26,12 +27,15 @@ add_subdirectory(thirdparty/spdlog)
 # GLM Building
 add_subdirectory(thirdparty/glm)
 
+# ASSIMP Building
+add_subdirectory(thirdparty/assimp)
+
 #Multipass Example
 file(GLOB MULTIPASS_HEADERS "./include/*.h" "./multi-pass/*.h")
 file(GLOB MULTIPASS_SOURCES "./src/*.cpp" "./multi-pass/*.cpp")
 
 add_executable("multi-pass" ${MULTIPASS_SOURCES} ${MULTIPASS_HEADERS})
-target_link_libraries("multi-pass" spdlog glfw ${GLFW_LIBRARIES} glm mo-gfx)
+target_link_libraries("multi-pass" spdlog glfw ${GLFW_LIBRARIES} glm mo-gfx assimp)
 
 set_property(TARGET "multi-pass" PROPERTY FOLDER "mo-gfx-samples")
 
@@ -40,7 +44,7 @@ file(GLOB MODELVIEWER_HEADERS "./include/*.h" "./model-viewer/*.h")
 file(GLOB MODELVIEWER_SOURCES "./src/*.cpp" "./model-viewer/*.cpp")
 
 add_executable("model-viewer" ${MODELVIEWER_SOURCES} ${MODELVIEWER_HEADERS})
-target_link_libraries("model-viewer" spdlog glfw ${GLFW_LIBRARIES} glm mo-gfx ktx)
+target_link_libraries("model-viewer" spdlog glfw ${GLFW_LIBRARIES} glm mo-gfx assimp)
 
 set_property(TARGET "model-viewer" PROPERTY FOLDER "mo-gfx-samples")
 
