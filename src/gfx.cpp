@@ -179,6 +179,8 @@ namespace GFX
             return vk::Format::eD16UnormS8Uint;
         case Format::DEPTH_24UNORM_STENCIL_8INT:
             return vk::Format::eD24UnormS8Uint;
+        case Format::DEPTH_32FLOAT:
+            return vk::Format::eD32Sfloat;
         default:
             assert(false);
             return vk::Format::eA1R5G5B5UnormPack16;
@@ -428,7 +430,6 @@ namespace GFX
                 frameBufferCreateInfo.setWidth(m_width);
                 frameBufferCreateInfo.setHeight(m_height);
                 frameBufferCreateInfo.setLayers(1);
-                frameBufferCreateInfo.setAttachmentCount(m_attachments.size());
 
                 auto createFramebufferResult = s_device.createFramebuffer(frameBufferCreateInfo);
                 VK_ASSERT(createFramebufferResult);
@@ -470,6 +471,7 @@ namespace GFX
             else if (usage & vk::ImageUsageFlagBits::eDepthStencilAttachment)
             {
                 result.m_imageView = CreateVulkanImageView(result.m_image, format, vk::ImageAspectFlagBits::eDepth | vk::ImageAspectFlagBits::eStencil);
+                TransitionImageLayout(result.m_image, format, vk::ImageLayout::eUndefined, vk::ImageLayout::eDepthStencilAttachmentOptimal);
             }
 
             return result;
@@ -492,6 +494,7 @@ namespace GFX
                 else if (oldAttachment.m_usage & vk::ImageUsageFlagBits::eDepthStencilAttachment)
                 {
                     result.m_imageView = CreateVulkanImageView(result.m_image, oldAttachment.m_format, vk::ImageAspectFlagBits::eDepth | vk::ImageAspectFlagBits::eStencil);
+                    TransitionImageLayout(result.m_image, oldAttachment.m_format, vk::ImageLayout::eUndefined, vk::ImageLayout::eDepthStencilAttachmentOptimal);
                 }
             }
 
@@ -784,7 +787,7 @@ namespace GFX
             rasterizationStateCreateInfo.setPolygonMode(vk::PolygonMode::eFill);
             rasterizationStateCreateInfo.setLineWidth(1.0f);
             rasterizationStateCreateInfo.setCullMode(vk::CullModeFlagBits::eBack);
-            rasterizationStateCreateInfo.setFrontFace(vk::FrontFace::eClockwise);
+            rasterizationStateCreateInfo.setFrontFace(vk::FrontFace::eCounterClockwise);
             rasterizationStateCreateInfo.setDepthBiasEnable(false);
 
             vk::PipelineDepthStencilStateCreateInfo depthStencilStateCreateInfo = {};
@@ -991,7 +994,14 @@ namespace GFX
         {
             if (m_usage == BufferUsage::UniformBuffer)
             {
-                Map(offset + (s_currentImageIndex * m_size), size);
+                if (m_storageMode == BufferStorageMode::Dynamic)
+                {
+                    Map(offset + (s_currentImageIndex * m_size), size);
+                }
+                else
+                {
+                    Map(offset, size);
+                }
             }
             else
             {

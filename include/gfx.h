@@ -127,6 +127,7 @@ namespace GFX
         R32G32B32F,
         DEPTH_24UNORM_STENCIL_8INT,
         DEPTH_16UNORM_STENCIL_8INT,
+        DEPTH_32FLOAT,
         SWAPCHAIN
     };
 
