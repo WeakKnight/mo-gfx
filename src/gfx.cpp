@@ -153,41 +153,6 @@ namespace GFX
     };
 
     /*
-    ============================================Common Util Functions========================================================
-    */
-    vk::Format MapFormatForVulkan(const Format& format)
-    {
-        switch (format)
-        {
-        case Format::R32SF:
-            return vk::Format::eR32Sfloat;
-        case Format::R8G8B8A8:
-            return vk::Format::eR8G8B8A8Unorm;
-        case Format::R8G8B8:
-            return vk::Format::eR8G8B8Unorm;
-        case Format::R16G16B16A16F:
-            return vk::Format::eR16G16B16A16Sfloat;
-        case Format::R16G16B16F:
-            return vk::Format::eR16G16B16Sfloat;
-        case Format::R32G32B32A32F:
-            return vk::Format::eR32G32B32A32Sfloat;
-        case Format::R32G32B32F:
-            return vk::Format::eR32G32B32Sfloat;
-        case Format::SWAPCHAIN:
-            return s_swapChainImageFormat;
-        case Format::DEPTH_16UNORM_STENCIL_8INT:
-            return vk::Format::eD16UnormS8Uint;
-        case Format::DEPTH_24UNORM_STENCIL_8INT:
-            return vk::Format::eD24UnormS8Uint;
-        case Format::DEPTH_32FLOAT:
-            return vk::Format::eD32Sfloat;
-        default:
-            assert(false);
-            return vk::Format::eA1R5G5B5UnormPack16;
-        }
-    }
-
-    /*
     =============================================Internal Interface Declaration====================================================
     */
 
@@ -224,6 +189,7 @@ namespace GFX
     vk::SamplerAddressMode MapWrapModeForVulkan(const WrapMode& wrapMode);
     vk::BorderColor MapBorderColorForVulkan(const BorderColor& borderColor);
     vk::SampleCountFlagBits MapSampleCountForVulkan(const ImageSampleCount& sampleCount);
+    vk::Format MapFormatForVulkan(const Format& format);
 
     uint32_t FindMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties);
     vk::Format FindSupportedFormat(const std::vector<vk::Format>& candidates, vk::ImageTiling tilling, vk::FormatFeatureFlags features);
@@ -470,8 +436,14 @@ namespace GFX
             }
             else if (usage & vk::ImageUsageFlagBits::eDepthStencilAttachment)
             {
-                result.m_imageView = CreateVulkanImageView(result.m_image, format, vk::ImageAspectFlagBits::eDepth | vk::ImageAspectFlagBits::eStencil);
-                TransitionImageLayout(result.m_image, format, vk::ImageLayout::eUndefined, vk::ImageLayout::eDepthStencilAttachmentOptimal);
+                if (HasStencilComponent(format))
+                {
+                    result.m_imageView = CreateVulkanImageView(result.m_image, format, vk::ImageAspectFlagBits::eDepth | vk::ImageAspectFlagBits::eStencil);
+                }
+                else
+                {
+                    result.m_imageView = CreateVulkanImageView(result.m_image, format, vk::ImageAspectFlagBits::eDepth);
+                }
             }
 
             return result;
@@ -493,8 +465,14 @@ namespace GFX
                 }
                 else if (oldAttachment.m_usage & vk::ImageUsageFlagBits::eDepthStencilAttachment)
                 {
-                    result.m_imageView = CreateVulkanImageView(result.m_image, oldAttachment.m_format, vk::ImageAspectFlagBits::eDepth | vk::ImageAspectFlagBits::eStencil);
-                    TransitionImageLayout(result.m_image, oldAttachment.m_format, vk::ImageLayout::eUndefined, vk::ImageLayout::eDepthStencilAttachmentOptimal);
+                    if (HasStencilComponent(oldAttachment.m_format))
+                    {
+                        result.m_imageView = CreateVulkanImageView(result.m_image, oldAttachment.m_format, vk::ImageAspectFlagBits::eDepth | vk::ImageAspectFlagBits::eStencil);
+                    }
+                    else
+                    {
+                        result.m_imageView = CreateVulkanImageView(result.m_image, oldAttachment.m_format, vk::ImageAspectFlagBits::eDepth);
+                    }
                 }
             }
 
@@ -2474,6 +2452,40 @@ namespace GFX
         }
     }
 
+    vk::Format MapFormatForVulkan(const Format& format)
+    {
+        switch (format)
+        {
+        case Format::R32SF:
+            return vk::Format::eR32Sfloat;
+        case Format::R8G8B8A8:
+            return vk::Format::eR8G8B8A8Unorm;
+        case Format::R8G8B8:
+            return vk::Format::eR8G8B8Unorm;
+        case Format::R16G16B16A16F:
+            return vk::Format::eR16G16B16A16Sfloat;
+        case Format::R16G16B16F:
+            return vk::Format::eR16G16B16Sfloat;
+        case Format::R32G32B32A32F:
+            return vk::Format::eR32G32B32A32Sfloat;
+        case Format::R32G32B32F:
+            return vk::Format::eR32G32B32Sfloat;
+        case Format::SWAPCHAIN:
+            return s_swapChainImageFormat;
+        case Format::DEPTH_16UNORM_STENCIL_8INT:
+            return vk::Format::eD16UnormS8Uint;
+        case Format::DEPTH_24UNORM_STENCIL_8INT:
+            return vk::Format::eD24UnormS8Uint;
+        case Format::DEPTH_32FLOAT:
+            return vk::Format::eD32Sfloat;
+        case Format::DEPTH:
+            return FindDepthFormat();
+        default:
+            assert(false);
+            return vk::Format::eA1R5G5B5UnormPack16;
+        }
+    }
+
     uint32_t FindMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties)
     {
         for (uint32_t i = 0; i < s_physicalDeviceMemoryProperties.memoryTypeCount; i++) {
@@ -2506,7 +2518,7 @@ namespace GFX
 
     vk::Format FindDepthFormat()
     {
-        return FindSupportedFormat({ vk::Format::eD24UnormS8Uint, vk::Format::eD16UnormS8Uint, vk::Format::eD32Sfloat, vk::Format::eD32SfloatS8Uint }, vk::ImageTiling::eOptimal, vk::FormatFeatureFlagBits::eDepthStencilAttachment);
+        return FindSupportedFormat({ vk::Format::eD32Sfloat, vk::Format::eD24UnormS8Uint, vk::Format::eD16UnormS8Uint, vk::Format::eD32SfloatS8Uint }, vk::ImageTiling::eOptimal, vk::FormatFeatureFlagBits::eDepthStencilAttachment);
     }
 
     bool HasStencilComponent(vk::Format format)

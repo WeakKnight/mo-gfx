@@ -128,6 +128,10 @@ namespace GFX
         DEPTH_24UNORM_STENCIL_8INT,
         DEPTH_16UNORM_STENCIL_8INT,
         DEPTH_32FLOAT,
+        /*
+        Find Usable Depth Format Automaticly
+        */
+        DEPTH,
         SWAPCHAIN
     };
 

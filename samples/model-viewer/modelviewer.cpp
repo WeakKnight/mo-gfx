@@ -132,8 +132,6 @@ static void framebufferResizeCallback(GLFWwindow* window, int width, int height)
 	s_width = width;
 	s_height = height;
 
-	spdlog::info("WINDOW Resize");
-
 	// spdlog::info("Window Resize");
 	GFX::Resize(width, height);
 	GFX::ResizeRenderPass(s_meshRenderPass, width, height);
@@ -356,7 +354,7 @@ GFX::RenderPass CreateRenderPass()
 	GFX::AttachmentDescription depthAttachment = {};
 	depthAttachment.width = s_width;
 	depthAttachment.height = s_height;
-	depthAttachment.format = GFX::Format::DEPTH_24UNORM_STENCIL_8INT;
+	depthAttachment.format = GFX::Format::DEPTH;
 	depthAttachment.type = GFX::AttachmentType::DepthStencil;
 	depthAttachment.loadAction = GFX::AttachmentLoadAction::Clear;
 
