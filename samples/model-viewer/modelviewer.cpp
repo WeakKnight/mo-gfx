@@ -459,11 +459,11 @@ void ModelViewerExample::Init()
 	GFX::Init(initDesc);
 
 	s_scene = 
-		LoadScene("model-viewer/carved_pillar.fbx");
-		// LoadScene("model-viewer/xixi.fbx");
+		// LoadScene("model-viewer/carved_pillar.fbx");
+		LoadScene("model-viewer/TEST2.fbx");
 	
-	CreateModelUniformBlock("model-viewer/carved_pillar_Albedo.jpg");
-	// CreateModelUniformBlock("model-viewer/texture.jpg");
+	// CreateModelUniformBlock("model-viewer/carved_pillar_Albedo.jpg");
+	CreateModelUniformBlock("model-viewer/texture.jpg");
 	
 	s_meshRenderPass = CreateRenderPass();
 	s_meshPipeline = CreateMeshPipeline();

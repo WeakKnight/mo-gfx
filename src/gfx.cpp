@@ -319,6 +319,16 @@ namespace GFX
                 dependencies[i].setDependencyFlags(vk::DependencyFlagBits::eByRegion);
             }
 
+         /*   vk::SubpassDependency dependency = {};
+            dependency.setSrcSubpass(VK_SUBPASS_EXTERNAL);
+            dependency.setDstSubpass(0);
+            dependency.setSrcStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput);
+            dependency.setDstStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput);
+            dependency.setSrcAccessMask({});
+            dependency.setDstAccessMask(vk::AccessFlagBits::eColorAttachmentWrite);
+
+            dependencies.push_back(dependency);*/
+
             vk::RenderPassCreateInfo renderPassCreateInfo = {};
             renderPassCreateInfo.setAttachmentCount(attachmentDescs.size());
             renderPassCreateInfo.setPAttachments(attachmentDescs.data());
@@ -1766,6 +1776,8 @@ namespace GFX
         newViewport.setY(y);
         newViewport.setWidth(w);
         newViewport.setHeight(h);
+        newViewport.setMinDepth(0.0f);
+        newViewport.setMaxDepth(1.0f);
 
         s_commandBuffersDefault[s_currentImageIndex].setViewport(0, 1, &newViewport);
         
