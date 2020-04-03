@@ -40,3 +40,30 @@ void InitEnvironment(char** args)
 
 	spdlog::info("Environment Path Is {}", environmentPath);
 }
+
+namespace Math
+{
+	float Min(float a, float b)
+	{
+		if (a <= b)
+		{
+			return a;
+		}
+		else
+		{
+			return b;
+		}
+	}
+
+	float Max(float a, float b)
+	{
+		if (a >= b)
+		{
+			return a;
+		}
+		else
+		{
+			return b;
+		}
+	}
+}

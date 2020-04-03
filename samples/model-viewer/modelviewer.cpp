@@ -222,12 +222,19 @@ Scene* LoadScene(const char* path)
 	Assimp::Importer meshImporter;
 	const aiScene* aiScene = meshImporter.ReadFile(path, aiProcess_OptimizeGraph | aiProcess_OptimizeMeshes);
 
+	float minX = INFINITY;
+	float minY = INFINITY;
+	float minZ = INFINITY;
+	float maxX = -INFINITY;
+	float maxY = -INFINITY;
+	float maxZ = -INFINITY;
+
 	for (int i = 0; i < aiScene->mNumMeshes; i++)
 	{
 		aiMesh* aiMesh = aiScene->mMeshes[i];
 		Mesh* mesh = new Mesh();
 		mesh->name = aiMesh->mName.C_Str();
-
+		
 		mesh->indices.resize(aiMesh->mNumFaces * 3);
 		for (size_t f = 0; f < aiMesh->mNumFaces; ++f)
 		{
@@ -240,12 +247,24 @@ Scene* LoadScene(const char* path)
 		for (size_t j = 0; j < aiMesh->mNumVertices; ++j)
 		{
 			Vertex vertex;
+			
 			vertex.position = glm::vec3(aiMesh->mVertices[j].x, aiMesh->mVertices[j].y, aiMesh->mVertices[j].z);
 			vertex.normal = glm::vec3(aiMesh->mNormals[j].x, aiMesh->mNormals[j].y, aiMesh->mNormals[j].z);
 			vertex.uv = glm::vec2(aiMesh->mTextureCoords[0][j].x, 1.0f - aiMesh->mTextureCoords[0][j].y);
 
+			minX = Math::Min(vertex.position.x, minX);
+			minY = Math::Min(vertex.position.y, minY);
+			minZ = Math::Min(vertex.position.z, minZ);
+
+			maxX = Math::Max(vertex.position.x, maxX);
+			maxY = Math::Max(vertex.position.y, maxY);
+			maxZ = Math::Max(vertex.position.z, maxZ);
+
 			mesh->vertices.push_back(vertex);
 		}
+
+		target = 0.5f * (glm::vec3(minX, minY, minZ) + glm::vec3(maxX, maxY, maxZ));
+		radius = 1.5f * Math::Max(Math::Max(maxX - minX, maxY - minY), maxZ - minZ);
 
 		mesh->CreateGPUResources();
 
@@ -437,8 +456,12 @@ void ModelViewerExample::Init()
 
 	GFX::Init(initDesc);
 
-	s_scene = LoadScene("model-viewer/xixi.fbx");
-	CreateModelUniformBlock("model-viewer/texture.jpg");
+	s_scene = 
+		LoadScene("model-viewer/carved_pillar.fbx");
+		// LoadScene("model-viewer/xixi.fbx");
+	
+	CreateModelUniformBlock("model-viewer/carved_pillar_Albedo.jpg");
+	// CreateModelUniformBlock("model-viewer/texture.jpg");
 	
 	s_meshRenderPass = CreateRenderPass();
 	s_meshPipeline = CreateMeshPipeline();
@@ -472,11 +495,11 @@ void ModelViewerExample::MainLoop()
 			GFX::UpdateUniformBuffer(s_modelUniform->uniform, 0, &ubo);
 
 			GFX::BindUniform(s_modelUniform->uniform, 0);
-	/*		for (auto mesh : s_scene->meshes)*/
+			for (auto mesh : s_scene->meshes)
 			{
-				GFX::BindIndexBuffer(s_scene->meshes[0]->indexBuffer, 0, GFX::IndexType::UInt32);
-				GFX::BindVertexBuffer(s_scene->meshes[0]->vertexBuffer, 0);
-				GFX::DrawIndexed(s_scene->meshes[0]->indices.size(), 1, 0);
+				GFX::BindIndexBuffer(mesh->indexBuffer, 0, GFX::IndexType::UInt32);
+				GFX::BindVertexBuffer(mesh->vertexBuffer, 0);
+				GFX::DrawIndexed(mesh->indices.size(), 1, 0);
 			}
 
 			GFX::EndRenderPass();
