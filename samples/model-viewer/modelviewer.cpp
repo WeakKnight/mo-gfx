@@ -350,6 +350,10 @@ GFX::RenderPass CreateRenderPass()
 	swapChainAttachment.storeAction = GFX::AttachmentStoreAction::Store;
 	swapChainAttachment.type = GFX::AttachmentType::Present;
 
+	GFX::ClearValue colorClearColor = {};
+	colorClearColor.SetColor(GFX::Color(0.0f, 0.0f, 0.0f, 1.0f));
+	swapChainAttachment.clearValue = colorClearColor;
+
 	// Index 1
 	GFX::AttachmentDescription depthAttachment = {};
 	depthAttachment.width = s_width;
@@ -358,9 +362,9 @@ GFX::RenderPass CreateRenderPass()
 	depthAttachment.type = GFX::AttachmentType::DepthStencil;
 	depthAttachment.loadAction = GFX::AttachmentLoadAction::Clear;
 
-	GFX::ClearValue clearColor = {};
-	clearColor.depth = 1.0f;
-	depthAttachment.clearValue = clearColor;
+	GFX::ClearValue depthClearColor = {};
+	depthClearColor.SetDepth(1.0f);
+	depthAttachment.clearValue = depthClearColor;
 
 	GFX::SubPassDescription subPassSwapChain = {};
 	subPassSwapChain.colorAttachments.push_back(0);

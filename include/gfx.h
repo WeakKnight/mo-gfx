@@ -4,6 +4,8 @@
 #include <vector>
 #include <memory>
 #include <list>
+#include <cassert>
+
 #include "ktx.h"
 #include "ktxvulkan.h"
 
@@ -318,9 +320,33 @@ namespace GFX
 
     struct ClearValue
     {
-        Color color = Color();
+        void SetColor(Color& color)
+        {
+            this->color = color;
+            hasColor = true;
+            assert(!hasDepthStencil);
+        }
+
+        void SetDepth(float depth)
+        {
+            this->depth = depth;
+            hasDepthStencil = true;
+            assert(!hasColor);
+        }
+
+        void SetStencil(float stencil)
+        {
+            this->stencil = stencil;
+            hasDepthStencil = true;
+            assert(!hasColor);
+        }
+
+        Color color = Color(0.0f, 0.0f, 0.0f, 0.0f);
         float depth = 1.0f;
         uint32_t stencil = 0;
+
+        bool hasDepthStencil = false;
+        bool hasColor = false;
     };
 
     struct AttachmentDescription

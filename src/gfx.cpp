@@ -237,32 +237,27 @@ namespace GFX
                 attachmentDescs[i].setStencilStoreOp(MapStoreOpForVulkan(attachmentDesc.stencilStoreAction));
                 attachmentDescs[i].setInitialLayout(vk::ImageLayout::eUndefined);
                 
-                vk::ClearValue clearValue = {};
-
                 if (attachmentDesc.type == AttachmentType::Present)
                 {
                     attachmentDescs[i].setFinalLayout(vk::ImageLayout::ePresentSrcKHR);
                     m_attachmentDic[i] = GetSwapChainAttachment(s_currentImageIndex);
-                    clearValue.color = MapClearColorValueForVulkan(attachmentDesc.clearValue);
                 }
                 else if (attachmentDesc.type == AttachmentType::DepthStencil)
                 {
                     attachmentDescs[i].setFinalLayout(vk::ImageLayout::eDepthStencilAttachmentOptimal);
                     m_attachmentDic[i] = CreateAttachment(attachmentDesc.width, attachmentDesc.height, MapFormatForVulkan(attachmentDesc.format), vk::ImageUsageFlagBits::eDepthStencilAttachment);
-                    clearValue.depthStencil = MapClearDepthStencilValueForVulkan(attachmentDesc.clearValue);
                 }
                 else if (attachmentDesc.type == AttachmentType::Color)
                 {
                     attachmentDescs[i].setFinalLayout(vk::ImageLayout::eColorAttachmentOptimal);
                     m_attachmentDic[i] = CreateAttachment(attachmentDesc.width, attachmentDesc.height, MapFormatForVulkan(attachmentDesc.format), vk::ImageUsageFlagBits::eColorAttachment);
-                    clearValue.color = MapClearColorValueForVulkan(attachmentDesc.clearValue);
                 }
                 else
                 {
                     assert(false);
                 }
 
-                m_clearValues.push_back(clearValue);
+                m_clearValues.push_back(MapClearValueForVulkan(attachmentDesc.clearValue));
             }
 
             std::vector<vk::SubpassDescription> subpassDescs(desc.subpasses.size());
@@ -562,6 +557,21 @@ namespace GFX
                 return vk::AttachmentStoreOp::eStore;
             case AttachmentStoreAction::DontCare:
                 return vk::AttachmentStoreOp::eDontCare;
+            }
+        }
+
+        vk::ClearValue MapClearValueForVulkan(const ClearValue& clearValue)
+        {
+            vk::ClearValue result;
+
+            if (clearValue.hasColor)
+            {
+                return MapClearColorValueForVulkan(clearValue);
+            }
+            else
+            {
+                assert(clearValue.hasDepthStencil);
+                return MapClearDepthStencilValueForVulkan(clearValue);
             }
         }
 
