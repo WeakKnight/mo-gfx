@@ -162,6 +162,20 @@ namespace GFX
         uint32_t id = 0;
     };
 
+    enum class FrontFace
+    {
+        Clockwise,
+        CounterClockwise
+    };
+
+    enum class CullFace
+    {
+        Front,
+        Back,
+        FrontAndBack,
+        None
+    };
+
     enum class ImageType
     {
         Image2D,
@@ -590,6 +604,8 @@ namespace GFX
         bool enableDepthTest = false;
         bool enableStencilTest = false;
         uint32_t subpass = 0;
+        FrontFace fronFace = FrontFace::CounterClockwise;
+        CullFace cullFace = CullFace::Back;
     };
 
     struct Pipeline

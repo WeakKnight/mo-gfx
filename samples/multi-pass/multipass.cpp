@@ -261,6 +261,7 @@ void MultiPassExample::Init()
 	pipelineDesc.renderPass = renderPass;
 	pipelineDesc.enableDepthTest = true;
 	pipelineDesc.subpass = 0;
+	pipelineDesc.fronFace = GFX::FrontFace::Clockwise;
 
 	pipeline = GFX::CreatePipeline(pipelineDesc);
 

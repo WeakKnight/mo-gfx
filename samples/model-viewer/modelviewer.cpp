@@ -237,12 +237,12 @@ Scene* LoadScene(const char* path)
 			}
 		}
 
-		for (size_t i = 0; i < aiMesh->mNumVertices; ++i)
+		for (size_t j = 0; j < aiMesh->mNumVertices; ++j)
 		{
 			Vertex vertex;
-			vertex.position = glm::vec3(aiMesh->mVertices[i].x, aiMesh->mVertices[i].y, aiMesh->mVertices[i].z);
-			vertex.normal = glm::vec3(aiMesh->mNormals[i].x, aiMesh->mNormals[i].y, aiMesh->mNormals[i].z);
-			vertex.uv = glm::vec2(aiMesh->mTextureCoords[0][i].x, 1.0f - aiMesh->mTextureCoords[0][i].y);
+			vertex.position = glm::vec3(aiMesh->mVertices[j].x, aiMesh->mVertices[j].y, aiMesh->mVertices[j].z);
+			vertex.normal = glm::vec3(aiMesh->mNormals[j].x, aiMesh->mNormals[j].y, aiMesh->mNormals[j].z);
+			vertex.uv = glm::vec2(aiMesh->mTextureCoords[0][j].x, 1.0f - aiMesh->mTextureCoords[0][j].y);
 
 			mesh->vertices.push_back(vertex);
 		}

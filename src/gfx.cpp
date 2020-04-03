@@ -786,8 +786,8 @@ namespace GFX
             rasterizationStateCreateInfo.setRasterizerDiscardEnable(false);
             rasterizationStateCreateInfo.setPolygonMode(vk::PolygonMode::eFill);
             rasterizationStateCreateInfo.setLineWidth(1.0f);
-            rasterizationStateCreateInfo.setCullMode(vk::CullModeFlagBits::eBack);
-            rasterizationStateCreateInfo.setFrontFace(vk::FrontFace::eCounterClockwise);
+            rasterizationStateCreateInfo.setCullMode(MapCullModeForVulkan(desc.cullFace));
+            rasterizationStateCreateInfo.setFrontFace(MapFrontFaceForVulkan(desc.fronFace));
             rasterizationStateCreateInfo.setDepthBiasEnable(false);
 
             vk::PipelineDepthStencilStateCreateInfo depthStencilStateCreateInfo = {};
@@ -924,6 +924,32 @@ namespace GFX
             default:
                 assert(false);
                 return vk::PrimitiveTopology::eTriangleList;
+            }
+        }
+
+        vk::FrontFace MapFrontFaceForVulkan(const FrontFace& frontFace)
+        {
+            switch (frontFace)
+            {
+            case FrontFace::Clockwise:
+                return vk::FrontFace::eClockwise;
+            case FrontFace::CounterClockwise:
+                return vk::FrontFace::eCounterClockwise;
+            }
+        }
+
+        vk::CullModeFlags MapCullModeForVulkan(const CullFace& cullFace)
+        {
+            switch (cullFace)
+            {
+            case CullFace::Back:
+                return vk::CullModeFlagBits::eBack;
+            case CullFace::Front:
+                return vk::CullModeFlagBits::eFront;
+            case CullFace::FrontAndBack:
+                return vk::CullModeFlagBits::eFrontAndBack;
+            case CullFace::None:
+                return vk::CullModeFlagBits::eNone;
             }
         }
 
