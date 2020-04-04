@@ -7,6 +7,8 @@
 #define GLM_FORCE_RADIANS
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtx/matrix_decompose.hpp>
+#include <glm/gtx/euler_angles.hpp>
 
 #include <assimp/Importer.hpp> 
 #include <assimp/scene.h>     
@@ -16,6 +18,51 @@
 
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
+
+float boxVertices[] = {
+	// positions          
+	-1.0f,  1.0f, -1.0f,
+	-1.0f, -1.0f, -1.0f,
+	 1.0f, -1.0f, -1.0f,
+	 1.0f, -1.0f, -1.0f,
+	 1.0f,  1.0f, -1.0f,
+	-1.0f,  1.0f, -1.0f,
+
+	-1.0f, -1.0f,  1.0f,
+	-1.0f, -1.0f, -1.0f,
+	-1.0f,  1.0f, -1.0f,
+	-1.0f,  1.0f, -1.0f,
+	-1.0f,  1.0f,  1.0f,
+	-1.0f, -1.0f,  1.0f,
+
+	 1.0f, -1.0f, -1.0f,
+	 1.0f, -1.0f,  1.0f,
+	 1.0f,  1.0f,  1.0f,
+	 1.0f,  1.0f,  1.0f,
+	 1.0f,  1.0f, -1.0f,
+	 1.0f, -1.0f, -1.0f,
+
+	-1.0f, -1.0f,  1.0f,
+	-1.0f,  1.0f,  1.0f,
+	 1.0f,  1.0f,  1.0f,
+	 1.0f,  1.0f,  1.0f,
+	 1.0f, -1.0f,  1.0f,
+	-1.0f, -1.0f,  1.0f,
+
+	-1.0f,  1.0f, -1.0f,
+	 1.0f,  1.0f, -1.0f,
+	 1.0f,  1.0f,  1.0f,
+	 1.0f,  1.0f,  1.0f,
+	-1.0f,  1.0f,  1.0f,
+	-1.0f,  1.0f, -1.0f,
+
+	-1.0f, -1.0f, -1.0f,
+	-1.0f, -1.0f,  1.0f,
+	 1.0f, -1.0f, -1.0f,
+	 1.0f, -1.0f, -1.0f,
+	-1.0f, -1.0f,  1.0f,
+	 1.0f, -1.0f,  1.0f
+};
 
 class ModelUniformBlock
 {
@@ -122,6 +169,166 @@ GFX::RenderPass s_meshRenderPass;
 GFX::Pipeline s_meshPipeline;
 GFX::Shader s_meshVertShader;
 GFX::Shader s_meshFragShader;
+
+class Skybox
+{
+public:
+	// Uniforms
+	GFX::Uniform uniform;
+	GFX::UniformLayout uniformLayout;
+	GFX::Buffer uniformBuffer;
+	GFX::Image image;
+	GFX::Sampler sampler;
+
+	// Model Data
+	GFX::Buffer vertexBuffer;
+
+	// Pipeline
+	GFX::Shader vertexShader;
+	GFX::Shader fragShader;
+	GFX::Pipeline pipeline;
+
+	static Skybox* Create()
+	{
+		Skybox* result = new Skybox();
+
+		// Load And Create Cube Map
+		int texWidth, texHeight, texChannels;
+
+		stbi_uc* pixels[6];
+		pixels[0] = stbi_load("model-viewer/skybox/Front+Z.png", &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+		pixels[1] = stbi_load("model-viewer/skybox/Back-Z.png", &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+		pixels[2] = stbi_load("model-viewer/skybox/Up+Y.png", &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+		pixels[3] = stbi_load("model-viewer/skybox/Down-Y.png", &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+		pixels[5] = stbi_load("model-viewer/skybox/Left+X.png", &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+		pixels[4] = stbi_load("model-viewer/skybox/Right-X.png", &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+
+		GFX::ImageDescription imageDescription = {};
+		imageDescription.format = GFX::Format::R8G8B8A8;
+		imageDescription.width = texWidth;
+		imageDescription.height = texHeight;
+		imageDescription.depth = 1;
+		imageDescription.readOrWriteByCPU = false;
+		imageDescription.usage = GFX::ImageUsage::SampledImage;
+		imageDescription.type = GFX::ImageType::Cube;
+		imageDescription.sampleCount = GFX::ImageSampleCount::Sample1;
+
+		result->image = GFX::CreateImage(imageDescription);
+
+		GFX::BufferDescription stagingBufferDesc = {};
+		stagingBufferDesc.size = sizeof(stbi_uc) * texWidth * texHeight * 4 * 6;
+		stagingBufferDesc.storageMode = GFX::BufferStorageMode::Dynamic;
+		stagingBufferDesc.usage = GFX::BufferUsage::TransferBuffer;
+
+		GFX::Buffer stagingBuffer = GFX::CreateBuffer(stagingBufferDesc);
+
+		for (int i = 0; i < 6; i++)
+		{
+			GFX::UpdateBuffer(stagingBuffer, i * (sizeof(stbi_uc) * texWidth * texHeight * 4), sizeof(stbi_uc) * texWidth * texHeight * 4, pixels[i]);
+		}
+
+		GFX::CopyBufferToImage(result->image, stagingBuffer);
+		GFX::DestroyBuffer(stagingBuffer);
+
+		STBI_FREE(pixels[0]);
+		STBI_FREE(pixels[1]);
+		STBI_FREE(pixels[2]);
+		STBI_FREE(pixels[3]);
+		STBI_FREE(pixels[4]);
+		STBI_FREE(pixels[5]);
+
+		GFX::SamplerDescription samplerDesc = {};
+		samplerDesc.maxLod = 10.0f;
+		samplerDesc.minFilter = GFX::FilterMode::Linear;
+		samplerDesc.magFilter = GFX::FilterMode::Linear;
+		samplerDesc.mipmapFilter = GFX::FilterMode::Linear;
+		samplerDesc.wrapU = GFX::WrapMode::ClampToEdge;
+		samplerDesc.wrapV = GFX::WrapMode::ClampToEdge;
+
+		result->sampler = GFX::CreateSampler(samplerDesc);
+
+		// Mesh Buffer
+		GFX::BufferDescription vertexBufferDesc = {};
+		vertexBufferDesc.size = sizeof(boxVertices);
+		vertexBufferDesc.storageMode = GFX::BufferStorageMode::Static;
+		vertexBufferDesc.usage = GFX::BufferUsage::VertexBuffer;
+
+		result->vertexBuffer = GFX::CreateBuffer(vertexBufferDesc);
+		GFX::UpdateBuffer(result->vertexBuffer, 0, sizeof(boxVertices), &boxVertices);
+
+		// Uniform Layout
+		GFX::UniformLayoutDescription uniformLayoutDesc = {};
+		uniformLayoutDesc.AddUniformBinding(0, GFX::UniformType::UniformBuffer, GFX::ShaderStage::Vertex, 1);
+		uniformLayoutDesc.AddUniformBinding(1, GFX::UniformType::SampledImage, GFX::ShaderStage::Fragment, 1);
+
+		result->uniformLayout = GFX::CreateUniformLayout(uniformLayoutDesc);
+
+		// Uniform
+		GFX::UniformDescription uniformDesc = {};
+		uniformDesc.AddBufferAttribute(0, s_modelUniform->buffer, 0, sizeof(UniformBufferObject));
+		uniformDesc.AddImageAttribute(1, result->image, result->sampler);
+		uniformDesc.SetUniformLayout(result->uniformLayout);
+		uniformDesc.SetStorageMode(GFX::UniformStorageMode::Static);
+		result->uniform = GFX::CreateUniform(uniformDesc);
+
+		// Shader
+		GFX::ShaderDescription vertShaderDesc = {};
+		vertShaderDesc.codes = StringUtils::ReadFile("model-viewer/skybox.vert");
+		vertShaderDesc.name = "skybox_vertex";
+		vertShaderDesc.stage = GFX::ShaderStage::Vertex;
+
+		result->vertexShader = GFX::CreateShader(vertShaderDesc);
+
+		GFX::ShaderDescription fragShaderDesc = {};
+		fragShaderDesc.codes = StringUtils::ReadFile("model-viewer/skybox.frag");
+		fragShaderDesc.name = "skybox_frag";
+		fragShaderDesc.stage = GFX::ShaderStage::Fragment;
+
+		result->fragShader = GFX::CreateShader(fragShaderDesc);
+
+		// Pipeline
+		GFX::VertexBindings vertexBindings = {};
+		vertexBindings.AddAttribute(0, 0, GFX::ValueType::Float32x3);
+		vertexBindings.SetBindingPosition(0);
+		vertexBindings.SetBindingType(GFX::BindingType::Vertex);
+		vertexBindings.SetStrideSize(sizeof(float) * 3);
+
+		GFX::UniformBindings uniformBindings = {};
+		uniformBindings.AddUniformLayout(result->uniformLayout);
+
+		GFX::GraphicsPipelineDescription pipelineDesc = {};
+		pipelineDesc.enableDepthTest = false;
+		pipelineDesc.enableStencilTest = false;
+		pipelineDesc.cullFace = GFX::CullFace::None;
+		pipelineDesc.fronFace = GFX::FrontFace::CounterClockwise;
+		pipelineDesc.primitiveTopology = GFX::PrimitiveTopology::TriangleList;
+		pipelineDesc.renderPass = s_meshRenderPass;
+		pipelineDesc.shaders.push_back(result->vertexShader);
+		pipelineDesc.shaders.push_back(result->fragShader);
+		pipelineDesc.subpass = 0;
+		pipelineDesc.uniformBindings = uniformBindings;
+		pipelineDesc.vertexBindings = vertexBindings;
+
+		result->pipeline = GFX::CreatePipeline(pipelineDesc);
+
+		return result;
+	}
+
+	~Skybox()
+	{
+		GFX::DestroyPipeline(pipeline);
+		GFX::DestroyShader(vertexShader);
+		GFX::DestroyShader(fragShader);
+		GFX::DestroyBuffer(vertexBuffer);
+		GFX::DestroyBuffer(uniformBuffer);
+		GFX::DestroySampler(sampler);
+		GFX::DestroyImage(image);
+		GFX::DestroyUniformLayout(uniformLayout);
+		GFX::DestroyUniform(uniform);
+	}
+};
+
+static Skybox* skybox = nullptr;
 
 // timing
 float deltaTime = 0.0f;	// time between current frame and last frame
@@ -247,6 +454,9 @@ Scene* LoadScene(const char* path)
 			Vertex vertex;
 			
 			vertex.position = glm::vec3(aiMesh->mVertices[j].x, aiMesh->mVertices[j].y, aiMesh->mVertices[j].z);
+			vertex.position = glm::eulerAngleX(glm::radians(-90.0f))*  glm::vec4(vertex.position, 1.0f);
+			vertex.position = glm::eulerAngleY(glm::radians(-90.0f)) * glm::vec4(vertex.position, 1.0f);
+
 			vertex.normal = glm::vec3(aiMesh->mNormals[j].x, aiMesh->mNormals[j].y, aiMesh->mNormals[j].z);
 			vertex.uv = glm::vec2(aiMesh->mTextureCoords[0][j].x, 1.0f - aiMesh->mTextureCoords[0][j].y);
 
@@ -464,9 +674,11 @@ void ModelViewerExample::Init()
 	
 	// CreateModelUniformBlock("model-viewer/carved_pillar_Albedo.jpg");
 	CreateModelUniformBlock("model-viewer/texture.jpg");
-	
+
 	s_meshRenderPass = CreateRenderPass();
 	s_meshPipeline = CreateMeshPipeline();
+
+	skybox = Skybox::Create();
 }
 
 void ModelViewerExample::MainLoop()
@@ -483,19 +695,24 @@ void ModelViewerExample::MainLoop()
 		{
 			GFX::BeginRenderPass(s_meshRenderPass, 0, 0, s_width, s_height);
 
-			GFX::ApplyPipeline(s_meshPipeline);
-
 			GFX::SetViewport(0, 0, s_width, s_height);
 			GFX::SetScissor(0, 0, s_width, s_height);
 
 			UniformBufferObject ubo = {};
 			ubo.view = GetViewMatrix();
-				// glm::lookAt(glm::vec3(2.0f, 26.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
 			ubo.proj = glm::perspective(glm::radians(45.0f), (float)s_width / (float)s_height, 0.1f, 1000.0f);
 			ubo.proj[1][1] *= -1;
 
 			GFX::UpdateUniformBuffer(s_modelUniform->uniform, 0, &ubo);
 
+			GFX::ApplyPipeline(skybox->pipeline);
+			// sky box
+			GFX::BindUniform(skybox->uniform, 0);
+			GFX::BindVertexBuffer(skybox->vertexBuffer, 0);
+			GFX::Draw(108, 1, 0, 0);
+
+			GFX::ApplyPipeline(s_meshPipeline);
+			// scene
 			GFX::BindUniform(s_modelUniform->uniform, 0);
 			for (auto mesh : s_scene->meshes)
 			{
@@ -513,6 +730,7 @@ void ModelViewerExample::MainLoop()
 
 void ModelViewerExample::CleanUp()
 {
+	delete skybox;
 	DestroyScene(s_scene);
 	delete s_modelUniform;
 	GFX::DestroyPipeline(s_meshPipeline);

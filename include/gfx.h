@@ -142,6 +142,7 @@ namespace GFX
         VertexBuffer,
         UniformBuffer,
         IndexBuffer,
+        TransferBuffer
     };
 
     enum class BufferStorageMode
@@ -680,6 +681,7 @@ namespace GFX
     Image Operation
     */
     void UpdateImageMemory(Image image, void* data, size_t size);
+    void CopyBufferToImage(Image image, Buffer buffer);
 
     /*
     Uniforms

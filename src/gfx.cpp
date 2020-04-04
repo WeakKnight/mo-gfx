@@ -197,10 +197,10 @@ namespace GFX
     bool HasStencilComponent(vk::Format format);
 
     void CreateVulkanBuffer(size_t size, vk::BufferUsageFlags usage, vk::MemoryPropertyFlags properties, vk::Buffer& buffer, vk::DeviceMemory& bufferMemory);
-    void TransitionImageLayout(vk::Image img, vk::Format format, vk::ImageLayout oldLayout, vk::ImageLayout newLayout);
-    void CopyBufferToImage(vk::Buffer buffer, vk::Image img, uint32_t width, uint32_t height);
+    void TransitionImageLayout(vk::Image img, vk::Format format, vk::ImageLayout oldLayout, vk::ImageLayout newLayout, uint32_t layerCount);
+    void CopyBufferToImage(vk::Buffer buffer, vk::Image img, uint32_t width, uint32_t height, uint32_t layerCount);
     void CreateVulkanImage(uint32_t width, uint32_t height, vk::Format format, vk::ImageTiling tiling, vk::ImageUsageFlags usage, vk::MemoryPropertyFlags properties, vk::Image& image, vk::DeviceMemory& imageMemory);
-    vk::ImageView CreateVulkanImageView(vk::Image image, vk::Format format, vk::ImageAspectFlags aspect);
+    vk::ImageView CreateVulkanImageView(vk::Image image, vk::Format format, vk::ImageAspectFlags aspect, vk::ImageViewType type, uint32_t layerCount, uint32_t levelCount);
 
     uint32_t HashTwoInt(uint32_t a, uint32_t b);
 
@@ -437,17 +437,17 @@ namespace GFX
 
             if (usage & vk::ImageUsageFlagBits::eColorAttachment)
             {
-                result.m_imageView = CreateVulkanImageView(result.m_image, format, vk::ImageAspectFlagBits::eColor);
+                result.m_imageView = CreateVulkanImageView(result.m_image, format, vk::ImageAspectFlagBits::eColor, vk::ImageViewType::e2D, 1, 1);
             }
             else if (usage & vk::ImageUsageFlagBits::eDepthStencilAttachment)
             {
                 if (HasStencilComponent(format))
                 {
-                    result.m_imageView = CreateVulkanImageView(result.m_image, format, vk::ImageAspectFlagBits::eDepth | vk::ImageAspectFlagBits::eStencil);
+                    result.m_imageView = CreateVulkanImageView(result.m_image, format, vk::ImageAspectFlagBits::eDepth | vk::ImageAspectFlagBits::eStencil, vk::ImageViewType::e2D, 1, 1);
                 }
                 else
                 {
-                    result.m_imageView = CreateVulkanImageView(result.m_image, format, vk::ImageAspectFlagBits::eDepth);
+                    result.m_imageView = CreateVulkanImageView(result.m_image, format, vk::ImageAspectFlagBits::eDepth, vk::ImageViewType::e2D, 1, 1);
                 }
             }
 
@@ -466,17 +466,17 @@ namespace GFX
                 CreateVulkanImage(width, height, oldAttachment.m_format, vk::ImageTiling::eOptimal, oldAttachment.m_usage | vk::ImageUsageFlagBits::eInputAttachment | vk::ImageUsageFlagBits::eSampled, vk::MemoryPropertyFlagBits::eDeviceLocal, result.m_image, result.m_memory);
                 if (oldAttachment.m_usage & vk::ImageUsageFlagBits::eColorAttachment)
                 {
-                    result.m_imageView = CreateVulkanImageView(result.m_image, oldAttachment.m_format, vk::ImageAspectFlagBits::eColor);
+                    result.m_imageView = CreateVulkanImageView(result.m_image, oldAttachment.m_format, vk::ImageAspectFlagBits::eColor, vk::ImageViewType::e2D, 1, 1);
                 }
                 else if (oldAttachment.m_usage & vk::ImageUsageFlagBits::eDepthStencilAttachment)
                 {
                     if (HasStencilComponent(oldAttachment.m_format))
                     {
-                        result.m_imageView = CreateVulkanImageView(result.m_image, oldAttachment.m_format, vk::ImageAspectFlagBits::eDepth | vk::ImageAspectFlagBits::eStencil);
+                        result.m_imageView = CreateVulkanImageView(result.m_image, oldAttachment.m_format, vk::ImageAspectFlagBits::eDepth | vk::ImageAspectFlagBits::eStencil, vk::ImageViewType::e2D, 1, 1);
                     }
                     else
                     {
-                        result.m_imageView = CreateVulkanImageView(result.m_image, oldAttachment.m_format, vk::ImageAspectFlagBits::eDepth);
+                        result.m_imageView = CreateVulkanImageView(result.m_image, oldAttachment.m_format, vk::ImageAspectFlagBits::eDepth, vk::ImageViewType::e2D, 1, 1);
                     }
                 }
             }
@@ -1011,6 +1011,8 @@ namespace GFX
                 return vk::BufferUsageFlagBits::eUniformBuffer;
             case BufferUsage::IndexBuffer:
                 return vk::BufferUsageFlagBits::eIndexBuffer;
+            case BufferUsage::TransferBuffer:
+                return vk::BufferUsageFlagBits::eTransferSrc;
             }
         }
 
@@ -1119,6 +1121,7 @@ namespace GFX
         SamplerResource(const SamplerDescription& desc)
         {
             vk::SamplerCreateInfo samplerCreateInfo = {};
+
             samplerCreateInfo.setAddressModeU(MapWrapModeForVulkan(desc.wrapU));
             samplerCreateInfo.setAddressModeV(MapWrapModeForVulkan(desc.wrapV));
             samplerCreateInfo.setAddressModeW(MapWrapModeForVulkan(desc.wrapW));
@@ -1172,6 +1175,17 @@ namespace GFX
             m_height = desc.height;
             m_format = MapFormatForVulkan(desc.format);
 
+            m_type = desc.type;
+
+            if (desc.type == ImageType::Cube)
+            {
+                m_layerCount = 6;
+            }
+            else
+            {
+                m_layerCount = 1;
+            }
+
             vk::ImageCreateInfo imageCreateInfo = {};
             vk::Extent3D imageExtent = {};
             imageExtent.setWidth(desc.width);
@@ -1182,6 +1196,11 @@ namespace GFX
             imageCreateInfo.setImageType(MapImageTypeForVulkan(desc.type));
             imageCreateInfo.setUsage(MapImageUsageForVulkan(desc.usage));
             imageCreateInfo.setMipLevels(desc.mipLevels);
+
+            if (desc.type == ImageType::Cube)
+            {
+                imageCreateInfo.setFlags(vk::ImageCreateFlagBits::eCubeCompatible);
+            }
 
             if (!desc.readOrWriteByCPU)
             {
@@ -1194,7 +1213,8 @@ namespace GFX
                 imageCreateInfo.setInitialLayout(vk::ImageLayout::ePreinitialized);
             }
 
-            imageCreateInfo.setArrayLayers(1);
+            imageCreateInfo.setArrayLayers(m_layerCount);
+
             imageCreateInfo.setSamples(MapSampleCountForVulkan(desc.sampleCount));
             // TODO Support Ray Tracing Queue
             imageCreateInfo.setSharingMode(vk::SharingMode::eExclusive);           
@@ -1223,7 +1243,7 @@ namespace GFX
 
             s_device.bindImageMemory(m_image, m_deviceMemory, 0);
 
-            m_imageView = CreateVulkanImageView(m_image, m_format, vk::ImageAspectFlagBits::eColor);
+            m_imageView = CreateVulkanImageView(m_image, m_format, vk::ImageAspectFlagBits::eColor, MapImageViewTypeForVulkan(m_type), m_layerCount, 1);
         }
 
         ImageResource(const char* path)
@@ -1282,11 +1302,24 @@ namespace GFX
             }
         }
 
+        vk::ImageViewType MapImageViewTypeForVulkan(const ImageType& imageType)
+        {
+            switch (imageType)
+            {
+            case ImageType::Image2D:
+                return vk::ImageViewType::e2D;
+            case ImageType::Cube:
+                return vk::ImageViewType::eCube;
+            }
+        }
+
         vk::ImageType MapImageTypeForVulkan(const ImageType& imageType)
         {
             switch (imageType)
             {
             case ImageType::Image2D:
+                return vk::ImageType::e2D;
+            case ImageType::Cube:
                 return vk::ImageType::e2D;
             default:
                 assert(false);
@@ -1299,6 +1332,10 @@ namespace GFX
         uint32_t m_width = 0;
         uint32_t m_height = 0;
         uint32_t m_depth = 0;
+
+        uint32_t m_layerCount = 1;
+
+        ImageType m_type;
 
         uint32_t m_memSize = 0;
 
@@ -1683,12 +1720,22 @@ namespace GFX
         memcpy(mapMemoryResult.value, data, size);
         s_device.unmapMemory(stagingBufferDeviceMemory);
 
-        TransitionImageLayout(imageResource->m_image, imageResource->m_format, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal);
-        CopyBufferToImage(stagingBuffer, imageResource->m_image, imageResource->m_width, imageResource->m_height);
-        TransitionImageLayout(imageResource->m_image, imageResource->m_format, vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal);
+        TransitionImageLayout(imageResource->m_image, imageResource->m_format, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal, imageResource->m_layerCount);
+        CopyBufferToImage(stagingBuffer, imageResource->m_image, imageResource->m_width, imageResource->m_height, imageResource->m_layerCount);
+        TransitionImageLayout(imageResource->m_image, imageResource->m_format, vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal, imageResource->m_layerCount);
 
         s_device.freeMemory(stagingBufferDeviceMemory);
         s_device.destroyBuffer(stagingBuffer);
+    }
+
+    void CopyBufferToImage(Image image, Buffer buffer)
+    {
+        ImageResource* imageResource = s_imageHandlePool.FetchResource(image.id);
+        BufferResource* bufferResource = s_bufferHandlePool.FetchResource(buffer.id);
+
+        TransitionImageLayout(imageResource->m_image, imageResource->m_format, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal, imageResource->m_layerCount);
+        CopyBufferToImage(bufferResource->m_buffer, imageResource->m_image, imageResource->m_width, imageResource->m_height, imageResource->m_layerCount);
+        TransitionImageLayout(imageResource->m_image, imageResource->m_format, vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal, imageResource->m_layerCount);
     }
 
     void BindUniform(Uniform uniform, uint32_t set)
@@ -2103,7 +2150,7 @@ namespace GFX
     {
         for (size_t i = 0; i < s_swapChainImages.size(); i++)
         {
-            s_swapChainImageViews.push_back(CreateVulkanImageView(s_swapChainImages[i], s_swapChainImageFormat, vk::ImageAspectFlagBits::eColor));
+            s_swapChainImageViews.push_back(CreateVulkanImageView(s_swapChainImages[i], s_swapChainImageFormat, vk::ImageAspectFlagBits::eColor, vk::ImageViewType::e2D, 1, 1));
         }
     }
 
@@ -2572,7 +2619,7 @@ namespace GFX
         s_device.bindBufferMemory(buffer, bufferMemory, 0);
     }
 
-    void TransitionImageLayout(vk::Image img, vk::Format format, vk::ImageLayout oldLayout, vk::ImageLayout newLayout)
+    void TransitionImageLayout(vk::Image img, vk::Format format, vk::ImageLayout oldLayout, vk::ImageLayout newLayout, uint32_t layerCount)
     {
         auto cb = BeginOneTimeCommandBuffer();
 
@@ -2587,7 +2634,7 @@ namespace GFX
         subresourceRange.setBaseMipLevel(0);
         subresourceRange.setBaseArrayLayer(0);
         subresourceRange.setLevelCount(1);
-        subresourceRange.setLayerCount(1);
+        subresourceRange.setLayerCount(layerCount);
         
         if (newLayout == vk::ImageLayout::eDepthStencilAttachmentOptimal)
         {
@@ -2641,7 +2688,7 @@ namespace GFX
         EndOneTimeCommandBuffer(cb);
     }
 
-    void CopyBufferToImage(vk::Buffer buffer, vk::Image img, uint32_t width, uint32_t height)
+    void CopyBufferToImage(vk::Buffer buffer, vk::Image img, uint32_t width, uint32_t height, uint32_t layerCount)
     {
         auto cb = BeginOneTimeCommandBuffer();
 
@@ -2655,7 +2702,7 @@ namespace GFX
 
         vk::ImageSubresourceLayers subresourceLayer = {};
         subresourceLayer.setBaseArrayLayer(0);
-        subresourceLayer.setLayerCount(1);
+        subresourceLayer.setLayerCount(layerCount);
         subresourceLayer.setAspectMask(vk::ImageAspectFlagBits::eColor);
         subresourceLayer.setMipLevel(0);
         bufferImageCopy.setImageSubresource(subresourceLayer);
@@ -2702,19 +2749,19 @@ namespace GFX
         s_device.bindImageMemory(image, imageMemory, 0);
     }
 
-    vk::ImageView CreateVulkanImageView(vk::Image image, vk::Format format, vk::ImageAspectFlags aspect) 
+    vk::ImageView CreateVulkanImageView(vk::Image image, vk::Format format, vk::ImageAspectFlags aspect, vk::ImageViewType type, uint32_t layerCount, uint32_t levelCount) 
     {
         vk::ImageViewCreateInfo viewInfo = {};
         viewInfo.setImage(image);
-        viewInfo.setViewType(vk::ImageViewType::e2D);
+        viewInfo.setViewType(type);
         viewInfo.setFormat(format);
 
         vk::ImageSubresourceRange imageSubresourceRange = {};
         imageSubresourceRange.setAspectMask(aspect);
         imageSubresourceRange.setBaseMipLevel(0);
-        imageSubresourceRange.setLevelCount(1);
+        imageSubresourceRange.setLevelCount(levelCount);
         imageSubresourceRange.setBaseArrayLayer(0);
-        imageSubresourceRange.setLayerCount(1);
+        imageSubresourceRange.setLayerCount(layerCount);
         viewInfo.setSubresourceRange(imageSubresourceRange);
 
         auto createImageViewResult = s_device.createImageView(viewInfo);

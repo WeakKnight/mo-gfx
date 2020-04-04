@@ -13,9 +13,15 @@ layout(location = 2) in vec2 inTexCoord;
 layout(location = 0) out vec3 fragNormal;
 layout(location = 1) out vec2 fragTexCoord;
 
+out gl_PerVertex 
+{
+	vec4 gl_Position;
+};
+
 void main() 
 {    
-    gl_Position = ubo.proj * ubo.view * vec4(inPosition, 1.0);
+    vec4 pos = ubo.proj * ubo.view * vec4(inPosition, 1.0);
+    gl_Position = pos;
 
     fragNormal = inNormal;
     fragTexCoord = inTexCoord;
