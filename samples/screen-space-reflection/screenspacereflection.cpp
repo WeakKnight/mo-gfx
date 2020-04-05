@@ -549,6 +549,59 @@ void CreateModelUniformBlock(const char* texPath)
 	s_modelUniform->uniform = GFX::CreateUniform(uniformDesc);
 }
 
+GFX::RenderPass CreateScreenSpaceReflectionRenderPass()
+{
+	// Index 0
+	GFX::AttachmentDescription swapChainAttachment = {};
+	swapChainAttachment.width = s_width;
+	swapChainAttachment.height = s_height;
+	swapChainAttachment.format = GFX::Format::SWAPCHAIN;
+	swapChainAttachment.loadAction = GFX::AttachmentLoadAction::Clear;
+	swapChainAttachment.storeAction = GFX::AttachmentStoreAction::Store;
+	swapChainAttachment.type = GFX::AttachmentType::Present;
+
+	GFX::ClearValue colorClearColor = {};
+	colorClearColor.SetColor(GFX::Color(0.0f, 0.0f, 0.0f, 1.0f));
+	swapChainAttachment.clearValue = colorClearColor;
+
+	// Index 1 Albedo Roughness
+	GFX::AttachmentDescription gBufferAlbedoRoughnessAttachment = {};
+	gBufferAlbedoRoughnessAttachment.width = s_width;
+	gBufferAlbedoRoughnessAttachment.height = s_height;
+	gBufferAlbedoRoughnessAttachment.format = GFX::Format::R8G8B8A8;
+	gBufferAlbedoRoughnessAttachment.loadAction = GFX::AttachmentLoadAction::DontCare;
+	gBufferAlbedoRoughnessAttachment.storeAction = GFX::AttachmentStoreAction::DontCare;
+	gBufferAlbedoRoughnessAttachment.type = GFX::AttachmentType::Color;
+
+
+	GFX::AttachmentDescription depthAttachment = {};
+	depthAttachment.width = s_width;
+	depthAttachment.height = s_height;
+	depthAttachment.format = GFX::Format::DEPTH;
+	depthAttachment.type = GFX::AttachmentType::DepthStencil;
+	depthAttachment.loadAction = GFX::AttachmentLoadAction::Clear;
+
+	GFX::ClearValue depthClearColor = {};
+	depthClearColor.SetDepth(1.0f);
+	depthAttachment.clearValue = depthClearColor;
+
+	GFX::SubPassDescription subPassSwapChain = {};
+	subPassSwapChain.colorAttachments.push_back(0);
+	subPassSwapChain.SetDepthStencilAttachment(1);
+	subPassSwapChain.pipelineType = GFX::PipelineType::Graphics;
+
+	GFX::RenderPassDescription renderPassDesc = {};
+	renderPassDesc.width = s_width;
+	renderPassDesc.height = s_height;
+
+	renderPassDesc.attachments.push_back(swapChainAttachment);
+	renderPassDesc.attachments.push_back(depthAttachment);
+
+	renderPassDesc.subpasses.push_back(subPassSwapChain);
+
+	return GFX::CreateRenderPass(renderPassDesc);
+}
+
 GFX::RenderPass CreateRenderPass()
 {
 	// Index 0
