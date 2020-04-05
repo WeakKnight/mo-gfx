@@ -48,5 +48,15 @@ target_link_libraries("model-viewer" spdlog glfw ${GLFW_LIBRARIES} glm mo-gfx as
 
 set_property(TARGET "model-viewer" PROPERTY FOLDER "mo-gfx-samples")
 
+#Screeb Space Reflection Example
+file(GLOB SSR_HEADERS "./include/*.h" "./screen-space-reflection/*.h")
+file(GLOB SSR_SOURCES "./src/*.cpp" "./screen-space-reflection/*.cpp")
+
+add_executable("screen-space-reflection" ${SSR_SOURCES} ${SSR_HEADERS})
+target_link_libraries("screen-space-reflection" spdlog glfw ${GLFW_LIBRARIES} glm mo-gfx assimp)
+
+set_property(TARGET "screen-space-reflection" PROPERTY FOLDER "mo-gfx-samples")
+
+
 
 
