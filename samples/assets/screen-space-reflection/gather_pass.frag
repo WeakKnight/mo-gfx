@@ -10,5 +10,13 @@ layout (location = 0) out vec4 outColor;
 
 void main()
 {    
+    vec4 normalRoughness = subpassLoad(samplerNormalRoughness);
+    vec3 N = normalRoughness.xyz * 2.0 - vec3(1.0);
+
+    if(length(normalRoughness.xyz) <= 0.0)
+    {
+        discard;
+    }
+
     outColor = vec4(subpassLoad(samplerAlbedo).rgb, 1.0);
 }

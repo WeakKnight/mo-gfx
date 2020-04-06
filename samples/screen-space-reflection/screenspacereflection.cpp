@@ -253,6 +253,24 @@ static void framebufferResizeCallback(GLFWwindow* window, int width, int height)
 	// spdlog::info("Window Resize");
 	GFX::Resize(width, height);
 	GFX::ResizeRenderPass(s_meshRenderPass, width, height);
+
+	// Recreate Attachment Relavant Uniform
+	
+	GFX::DestroyUniform(s_gatherUniform);
+	GFX::UniformDescription gatherUniformDesc = {};
+	gatherUniformDesc.AddInputAttachmentAttribute(0, s_meshRenderPass, 1);
+	gatherUniformDesc.AddInputAttachmentAttribute(1, s_meshRenderPass, 2);
+	gatherUniformDesc.AddInputAttachmentAttribute(2, s_meshRenderPass, 3);
+	gatherUniformDesc.SetUniformLayout(s_gatherUniformLayout);
+	gatherUniformDesc.SetStorageMode(GFX::UniformStorageMode::Dynamic);
+	s_gatherUniform = GFX::CreateUniform(gatherUniformDesc);
+
+	GFX::DestroyUniform(s_presentUniform);
+	GFX::UniformDescription presentUniformDesc = {};
+	presentUniformDesc.AddSampledAttachmentAttribute(0, s_meshRenderPass, 4, s_nearestSampler);
+	presentUniformDesc.SetUniformLayout(s_presentUniformLayout);
+	presentUniformDesc.SetStorageMode(GFX::UniformStorageMode::Dynamic);
+	s_presentUniform = GFX::CreateUniform(presentUniformDesc);
 }
 
 static bool firstMouseCapture = false;
@@ -707,12 +725,6 @@ void ScreenSpaceReflectionExample::MainLoop()
 
 			GFX::UpdateUniformBuffer(s_modelUniform->uniform, 0, &ubo);
 
-			//GFX::ApplyPipeline(skybox->pipeline);
-			//// sky box
-			//GFX::BindUniform(skybox->uniform, 0);
-			//GFX::BindVertexBuffer(skybox->vertexBuffer, 0);
-			//GFX::Draw(108, 1, 0, 0);
-
 			GFX::ApplyPipeline(s_meshMRTPipelineObject->pipeline);
 			GFX::BindUniform(s_modelUniform->uniform, 0);
 			for (auto mesh : s_scene->meshes)
@@ -723,6 +735,12 @@ void ScreenSpaceReflectionExample::MainLoop()
 			}
 
 			GFX::NextRenderPass();
+			GFX::ApplyPipeline(skybox->pipeline);
+			// sky box
+			GFX::BindUniform(skybox->uniform, 0);
+			GFX::BindVertexBuffer(skybox->vertexBuffer, 0);
+			GFX::Draw(108, 1, 0, 0);
+
 			GFX::ApplyPipeline(s_gatherPipelineObject->pipeline);
 			GFX::BindUniform(s_gatherUniform, 0);
 			GFX::Draw(3, 1, 0, 0);

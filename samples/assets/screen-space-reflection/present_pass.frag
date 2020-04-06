@@ -9,11 +9,10 @@ layout (location = 0) out vec4 outColor;
 
 void main()
 {
-    const float exposure = 1.5;
+    const float exposure = 1.0;
 
     // vec3 hdrColor = subpassLoad(samplerHdr).rgb;
     vec3 hdrColor = texture(samplerHdr, inUV).rgb;
-    hdrColor = 0.333 * hdrColor;
 
     vec3 mappedColor = vec3(1.0) - exp(-hdrColor * exposure);
      // Gamma Correction
