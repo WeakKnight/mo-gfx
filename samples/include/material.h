@@ -11,7 +11,7 @@ public:
 		return mat;
 	}
 
-	void Build(GFX::RenderPass renderPass, uint32_t subpassIndex, uint32_t subpassColorAttachmentCount,GFX::VertexBindings& vertexBindings, GFX::UniformBindings& uniformBindings, const std::string& vertShaderPath, const std::string& fragShaderPath, bool enableDepth)
+	void Build(GFX::RenderPass renderPass, uint32_t subpassIndex, uint32_t subpassColorAttachmentCount,GFX::VertexBindings& vertexBindings, GFX::UniformBindings& uniformBindings, const std::string& vertShaderPath, const std::string& fragShaderPath, bool enableDepth, GFX::CullFace cullface = GFX::CullFace::Back)
 	{
 		// Shader Creation
 		GFX::ShaderDescription vertDesc = {};
@@ -38,6 +38,7 @@ public:
 		pipelineDesc.uniformBindings = uniformBindings;
 		pipelineDesc.shaders.push_back(vertShader);
 		pipelineDesc.shaders.push_back(fragShader);
+		pipelineDesc.cullFace = cullface;
 		
 		for (int i = 0; i < subpassColorAttachmentCount; i++)
 		{

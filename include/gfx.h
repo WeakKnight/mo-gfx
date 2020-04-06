@@ -390,7 +390,8 @@ namespace GFX
     enum class Access
     {
         ColorAttachmentWrite,
-        ShaderRead
+        ShaderRead,
+        InputAttachmentRead,
     };
 
     struct DependencyDescription

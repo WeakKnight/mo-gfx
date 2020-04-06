@@ -496,6 +496,8 @@ namespace GFX
                 return vk::AccessFlagBits::eColorAttachmentWrite;
             case Access::ShaderRead:
                 return vk::AccessFlagBits::eShaderRead;
+            case Access::InputAttachmentRead:
+                return vk::AccessFlagBits::eInputAttachmentRead;
             default:
                 assert(false);
                 return vk::AccessFlagBits::eShaderRead;

@@ -6,7 +6,7 @@ layout(location = 2) in vec3 normalCameraSpace;
 
 layout(location = 0) out vec4 albedoTarget;
 layout(location = 1) out vec4 normalRoughnessTarget;
-layout(location = 2) out vec3 positionTarget;
+layout(location = 2) out vec4 positionTarget;
 
 layout(binding = 1) uniform sampler2D texSampler;
 
@@ -21,5 +21,5 @@ void main()
     vec3 mappedN = N / 2.0 + 0.5;
     normalRoughnessTarget = vec4(mappedN, 1.0);
 
-    positionTarget = posCameraSpace;
+    positionTarget = vec4(posCameraSpace, 0.0);
 }
