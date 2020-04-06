@@ -220,12 +220,12 @@ void MultiPassExample::Init()
 	uniformBuffer = GFX::CreateBuffer(uniformBufferDescription);
 
 	GFX::ShaderDescription vertDesc = {};
-	vertDesc.name = "default";
+	vertDesc.name = "multi-pass/default.vert";
 	vertDesc.codes = StringUtils::ReadFile("multi-pass/default.vert");
 	vertDesc.stage = GFX::ShaderStage::Vertex;
 
 	GFX::ShaderDescription fragDesc = {};
-	fragDesc.name = "default";
+	fragDesc.name = "multi-pass/default.frag";
 	fragDesc.codes = StringUtils::ReadFile("multi-pass/default.frag");
 	fragDesc.stage = GFX::ShaderStage::Fragment;
 
@@ -266,12 +266,12 @@ void MultiPassExample::Init()
 	pipeline = GFX::CreatePipeline(pipelineDesc);
 
 	GFX::ShaderDescription screenQuadVertDesc = {};
-	screenQuadVertDesc.name = "default";
+	screenQuadVertDesc.name = "multi-pass/screen_quad.vert";
 	screenQuadVertDesc.codes = StringUtils::ReadFile("multi-pass/screen_quad.vert");
 	screenQuadVertDesc.stage = GFX::ShaderStage::Vertex;
 
 	GFX::ShaderDescription screenQuadFragDesc = {};
-	screenQuadFragDesc.name = "default";
+	screenQuadFragDesc.name = "multi-pass/screen_quad_test.frag";
 	screenQuadFragDesc.codes = StringUtils::ReadFile("multi-pass/screen_quad_test.frag");
 	screenQuadFragDesc.stage = GFX::ShaderStage::Fragment;
 

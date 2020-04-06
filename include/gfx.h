@@ -625,6 +625,11 @@ namespace GFX
         uint32_t id = 0;
     };
 
+    struct BlendState
+    {
+        bool enable = false;
+    };
+
     struct GraphicsPipelineDescription
     {
         std::vector<Shader> shaders;
@@ -637,6 +642,7 @@ namespace GFX
         uint32_t subpass = 0;
         FrontFace fronFace = FrontFace::CounterClockwise;
         CullFace cullFace = CullFace::Back;
+        std::vector<BlendState> blendStates;
     };
 
     struct Pipeline

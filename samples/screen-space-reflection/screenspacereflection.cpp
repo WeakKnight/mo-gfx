@@ -19,50 +19,8 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
 
-float boxVertices[] = {
-	// positions          
-	-1.0f,  1.0f, -1.0f,
-	-1.0f, -1.0f, -1.0f,
-	 1.0f, -1.0f, -1.0f,
-	 1.0f, -1.0f, -1.0f,
-	 1.0f,  1.0f, -1.0f,
-	-1.0f,  1.0f, -1.0f,
-
-	-1.0f, -1.0f,  1.0f,
-	-1.0f, -1.0f, -1.0f,
-	-1.0f,  1.0f, -1.0f,
-	-1.0f,  1.0f, -1.0f,
-	-1.0f,  1.0f,  1.0f,
-	-1.0f, -1.0f,  1.0f,
-
-	 1.0f, -1.0f, -1.0f,
-	 1.0f, -1.0f,  1.0f,
-	 1.0f,  1.0f,  1.0f,
-	 1.0f,  1.0f,  1.0f,
-	 1.0f,  1.0f, -1.0f,
-	 1.0f, -1.0f, -1.0f,
-
-	-1.0f, -1.0f,  1.0f,
-	-1.0f,  1.0f,  1.0f,
-	 1.0f,  1.0f,  1.0f,
-	 1.0f,  1.0f,  1.0f,
-	 1.0f, -1.0f,  1.0f,
-	-1.0f, -1.0f,  1.0f,
-
-	-1.0f,  1.0f, -1.0f,
-	 1.0f,  1.0f, -1.0f,
-	 1.0f,  1.0f,  1.0f,
-	 1.0f,  1.0f,  1.0f,
-	-1.0f,  1.0f,  1.0f,
-	-1.0f,  1.0f, -1.0f,
-
-	-1.0f, -1.0f, -1.0f,
-	-1.0f, -1.0f,  1.0f,
-	 1.0f, -1.0f, -1.0f,
-	 1.0f, -1.0f, -1.0f,
-	-1.0f, -1.0f,  1.0f,
-	 1.0f, -1.0f,  1.0f
-};
+#include "material.h"
+#include "mesh.h"
 
 class ModelUniformBlock
 {
@@ -89,74 +47,6 @@ struct UniformBufferObject
 	glm::mat4 proj;
 };
 
-struct Vertex
-{
-	glm::vec3 position;
-	glm::vec3 normal;
-	glm::vec2 uv;
-};
-
-class Mesh
-{
-public:
-	Mesh()
-	{
-	}
-
-	~Mesh()
-	{
-		if (gpuResourceInitialized)
-		{
-			DestroyGPUResources();
-		}
-	}
-
-	void CreateGPUResources()
-	{
-		GFX::BufferDescription vertexBufferDesc = {};
-		vertexBufferDesc.usage = GFX::BufferUsage::VertexBuffer;
-		vertexBufferDesc.storageMode = GFX::BufferStorageMode::Static;
-		vertexBufferDesc.size = sizeof(Vertex) * vertices.size();
-
-		vertexBuffer = GFX::CreateBuffer(vertexBufferDesc);
-
-		GFX::BufferDescription indexBufferDesc = {};
-		indexBufferDesc.usage = GFX::BufferUsage::IndexBuffer;
-		indexBufferDesc.storageMode = GFX::BufferStorageMode::Static;
-		indexBufferDesc.size = sizeof(uint32_t) * indices.size();
-
-		indexBuffer = GFX::CreateBuffer(indexBufferDesc);
-
-		GFX::UpdateBuffer(vertexBuffer, 0, vertexBufferDesc.size, (void*)vertices.data());
-		GFX::UpdateBuffer(indexBuffer, 0, indexBufferDesc.size, (void*)indices.data());
-
-		gpuResourceInitialized = true;
-	}
-
-	void DestroyGPUResources()
-	{
-		GFX::DestroyBuffer(vertexBuffer);
-		GFX::DestroyBuffer(indexBuffer);
-	}
-
-	glm::mat4 transform = glm::mat4(1.0f);
-	// vec3 pos, vec3 normal, vec2 uv
-	std::vector<Vertex> vertices;
-	std::vector<uint32_t> indices;
-	std::string name;
-
-	GFX::Buffer vertexBuffer;
-	GFX::Buffer indexBuffer;
-
-	bool gpuResourceInitialized = false;
-};
-
-class Scene
-{
-public:
-	std::vector<Mesh*> meshes;
-};
-
 const int WIDTH = 800;
 const int HEIGHT = 600;
 
@@ -166,9 +56,21 @@ static int s_height = HEIGHT;
 static Scene* s_scene = nullptr;
 static ModelUniformBlock* s_modelUniform = nullptr;
 GFX::RenderPass s_meshRenderPass;
-GFX::Pipeline s_meshPipeline;
-GFX::Shader s_meshVertShader;
-GFX::Shader s_meshFragShader;
+
+static PipelineObject* s_meshPipelineObject = nullptr;
+
+static PipelineObject* s_meshMRTPipelineObject = nullptr;
+static PipelineObject* s_gatherPipelineObject = nullptr;
+static PipelineObject* s_presentPipelineObject = nullptr;
+
+static GFX::UniformLayout s_gatherUniformLayout;
+static GFX::Uniform s_gatherUniform;
+
+static GFX::UniformLayout s_presentUniformLayout;
+static GFX::Uniform s_presentUniform;
+
+static GFX::Sampler s_nearestSampler;
+static GFX::Sampler s_linearSampler;
 
 class Skybox
 {
@@ -305,7 +207,7 @@ public:
 		pipelineDesc.renderPass = s_meshRenderPass;
 		pipelineDesc.shaders.push_back(result->vertexShader);
 		pipelineDesc.shaders.push_back(result->fragShader);
-		pipelineDesc.subpass = 0;
+		pipelineDesc.subpass = 1;
 		pipelineDesc.uniformBindings = uniformBindings;
 		pipelineDesc.vertexBindings = vertexBindings;
 
@@ -342,14 +244,6 @@ static void framebufferResizeCallback(GLFWwindow* window, int width, int height)
 	// spdlog::info("Window Resize");
 	GFX::Resize(width, height);
 	GFX::ResizeRenderPass(s_meshRenderPass, width, height);
-}
-
-void KeyCallback(GLFWwindow*, int key, int scancode, int action, int mods)
-{
-	if (action == GLFW_PRESS)
-	{
-		
-	}
 }
 
 static bool firstMouseCapture = false;
@@ -420,78 +314,6 @@ glm::mat4 GetViewMatrix()
 	return glm::lookAt(target + glm::vec3(cameraX, cameraY, cameraZ), target, up);
 }
 
-Scene* LoadScene(const char* path)
-{
-	Scene* result = new Scene();
-
-	Assimp::Importer meshImporter;
-	const aiScene* aiScene = meshImporter.ReadFile(path, aiProcess_OptimizeGraph | aiProcess_OptimizeMeshes);
-
-	float minX = INFINITY;
-	float minY = INFINITY;
-	float minZ = INFINITY;
-	float maxX = -INFINITY;
-	float maxY = -INFINITY;
-	float maxZ = -INFINITY;
-
-	for (int i = 0; i < aiScene->mNumMeshes; i++)
-	{
-		aiMesh* aiMesh = aiScene->mMeshes[i];
-		Mesh* mesh = new Mesh();
-		mesh->name = aiMesh->mName.C_Str();
-		
-		mesh->indices.resize(aiMesh->mNumFaces * 3);
-		for (size_t f = 0; f < aiMesh->mNumFaces; ++f)
-		{
-			for (size_t i = 0; i < 3; ++i)
-			{
-				mesh->indices[f * 3 + i] = aiMesh->mFaces[f].mIndices[i];
-			}
-		}
-
-		for (size_t j = 0; j < aiMesh->mNumVertices; ++j)
-		{
-			Vertex vertex;
-			
-			vertex.position = glm::vec3(aiMesh->mVertices[j].x, aiMesh->mVertices[j].y, aiMesh->mVertices[j].z);
-			vertex.position = glm::eulerAngleX(glm::radians(-90.0f))*  glm::vec4(vertex.position, 1.0f);
-			vertex.position = glm::eulerAngleY(glm::radians(-90.0f)) * glm::vec4(vertex.position, 1.0f);
-
-			vertex.normal = glm::vec3(aiMesh->mNormals[j].x, aiMesh->mNormals[j].y, aiMesh->mNormals[j].z);
-			vertex.uv = glm::vec2(aiMesh->mTextureCoords[0][j].x, 1.0f - aiMesh->mTextureCoords[0][j].y);
-
-			minX = Math::Min(vertex.position.x, minX);
-			minY = Math::Min(vertex.position.y, minY);
-			minZ = Math::Min(vertex.position.z, minZ);
-
-			maxX = Math::Max(vertex.position.x, maxX);
-			maxY = Math::Max(vertex.position.y, maxY);
-			maxZ = Math::Max(vertex.position.z, maxZ);
-
-			mesh->vertices.push_back(vertex);
-		}
-
-		target = 0.5f * (glm::vec3(minX, minY, minZ) + glm::vec3(maxX, maxY, maxZ));
-		radius = 1.5f * Math::Max(Math::Max(maxX - minX, maxY - minY), maxZ - minZ);
-
-		mesh->CreateGPUResources();
-
-		result->meshes.push_back(mesh);
-	}
-
-	return result;
-}
-
-void DestroyScene(Scene* scene)
-{
-	for (auto mesh : scene->meshes)
-	{
-		delete mesh;
-	}
-
-	delete scene;
-}
-
 void CreateModelUniformBlock(const char* texPath)
 {
 	s_modelUniform = new ModelUniformBlock();
@@ -560,20 +382,63 @@ GFX::RenderPass CreateScreenSpaceReflectionRenderPass()
 	swapChainAttachment.storeAction = GFX::AttachmentStoreAction::Store;
 	swapChainAttachment.type = GFX::AttachmentType::Present;
 
-	GFX::ClearValue colorClearColor = {};
-	colorClearColor.SetColor(GFX::Color(0.0f, 0.0f, 0.0f, 1.0f));
-	swapChainAttachment.clearValue = colorClearColor;
+	GFX::ClearValue swapCahinClearColor = {};
+	swapCahinClearColor.SetColor(GFX::Color(0.0f, 0.0f, 0.0f, 1.0f));
+	swapChainAttachment.clearValue = swapCahinClearColor;
 
-	// Index 1 Albedo Roughness
-	GFX::AttachmentDescription gBufferAlbedoRoughnessAttachment = {};
-	gBufferAlbedoRoughnessAttachment.width = s_width;
-	gBufferAlbedoRoughnessAttachment.height = s_height;
-	gBufferAlbedoRoughnessAttachment.format = GFX::Format::R8G8B8A8;
-	gBufferAlbedoRoughnessAttachment.loadAction = GFX::AttachmentLoadAction::DontCare;
-	gBufferAlbedoRoughnessAttachment.storeAction = GFX::AttachmentStoreAction::DontCare;
-	gBufferAlbedoRoughnessAttachment.type = GFX::AttachmentType::Color;
+	// Index 1 Albedo 
+	GFX::AttachmentDescription gBufferAlbedoAttachment = {};
+	gBufferAlbedoAttachment.width = s_width;
+	gBufferAlbedoAttachment.height = s_height;
+	gBufferAlbedoAttachment.format = GFX::Format::R8G8B8A8;
+	gBufferAlbedoAttachment.loadAction = GFX::AttachmentLoadAction::Clear;
+	gBufferAlbedoAttachment.storeAction = GFX::AttachmentStoreAction::DontCare;
+	gBufferAlbedoAttachment.type = GFX::AttachmentType::Color;
 
+	GFX::ClearValue albedoClearColor = {};
+	albedoClearColor.SetColor(GFX::Color(0.0f, 0.0f, 0.0f, 1.0f));
+	gBufferAlbedoAttachment.clearValue = albedoClearColor;
 
+	// index 2 Normal Roughness
+	GFX::AttachmentDescription gBufferNormalRoughnessAttachment = {};
+	gBufferNormalRoughnessAttachment.width = s_width;
+	gBufferNormalRoughnessAttachment.height = s_height;
+	gBufferNormalRoughnessAttachment.format = GFX::Format::R8G8B8A8;
+	gBufferNormalRoughnessAttachment.loadAction = GFX::AttachmentLoadAction::Clear;
+	gBufferNormalRoughnessAttachment.storeAction = GFX::AttachmentStoreAction::DontCare;
+	gBufferNormalRoughnessAttachment.type = GFX::AttachmentType::Color;
+
+	GFX::ClearValue normalRoughnessClearColor = {};
+	normalRoughnessClearColor.SetColor(GFX::Color(0.0f, 0.0f, 0.0f, 1.0f));
+	gBufferNormalRoughnessAttachment.clearValue = normalRoughnessClearColor;
+
+	// Index 3 Position
+	GFX::AttachmentDescription gBufferPositionAttachment = {};
+	gBufferPositionAttachment.width = s_width;
+	gBufferPositionAttachment.height = s_height;
+	gBufferPositionAttachment.format = GFX::Format::R16G16B16A16F;
+	gBufferPositionAttachment.loadAction = GFX::AttachmentLoadAction::Clear;
+	gBufferPositionAttachment.storeAction = GFX::AttachmentStoreAction::DontCare;
+	gBufferPositionAttachment.type = GFX::AttachmentType::Color;
+
+	GFX::ClearValue positionClearColor = {};
+	positionClearColor.SetColor(GFX::Color(0.0f, 0.0f, 0.0f, 0.0f));
+	gBufferPositionAttachment.clearValue = positionClearColor;
+
+	// Index 4 Hdr Attachment
+	GFX::AttachmentDescription hdrAttachment = {};
+	hdrAttachment.width = s_width;
+	hdrAttachment.height = s_height;
+	hdrAttachment.format = GFX::Format::R16G16B16A16F;
+	hdrAttachment.loadAction = GFX::AttachmentLoadAction::Clear;
+	hdrAttachment.storeAction = GFX::AttachmentStoreAction::DontCare;
+	hdrAttachment.type = GFX::AttachmentType::Color;
+
+	GFX::ClearValue hdrClearColor = {};
+	hdrClearColor.SetColor(GFX::Color(0.0f, 0.0f, 0.0f, 1.0f));
+	hdrAttachment.clearValue = hdrClearColor;
+
+	// Index 5 Depth
 	GFX::AttachmentDescription depthAttachment = {};
 	depthAttachment.width = s_width;
 	depthAttachment.height = s_height;
@@ -585,19 +450,68 @@ GFX::RenderPass CreateScreenSpaceReflectionRenderPass()
 	depthClearColor.SetDepth(1.0f);
 	depthAttachment.clearValue = depthClearColor;
 
-	GFX::SubPassDescription subPassSwapChain = {};
-	subPassSwapChain.colorAttachments.push_back(0);
-	subPassSwapChain.SetDepthStencilAttachment(1);
-	subPassSwapChain.pipelineType = GFX::PipelineType::Graphics;
+	// Subpass 0, GBufferPass
+	GFX::SubPassDescription subpassGBuffer = {};
+	// Albedo
+	subpassGBuffer.colorAttachments.push_back(1);
+	// Normal Roughness
+	subpassGBuffer.colorAttachments.push_back(2);
+	// Position
+	subpassGBuffer.colorAttachments.push_back(3);
+	subpassGBuffer.SetDepthStencilAttachment(5);
+	subpassGBuffer.pipelineType = GFX::PipelineType::Graphics;
+	
+	// Subpass 1 Gathering Pass
+	GFX::SubPassDescription subpassGather = {};
+	// Render To HDR Pass
+	subpassGather.colorAttachments.push_back(4);
+	//// G Buffer
+	//subpassGather.inputAttachments.push_back(1);
+	//subpassGather.inputAttachments.push_back(2);
+	//subpassGather.inputAttachments.push_back(3);
+	subpassGather.pipelineType = GFX::PipelineType::Graphics;
+
+	// Subpass 2 Present
+	GFX::SubPassDescription subpassPresent = {};
+	// Render To Swapchain
+	subpassPresent.colorAttachments.push_back(0);
+	//// HDR Input
+	//subpassPresent.inputAttachments.push_back(4);
+	subpassPresent.pipelineType = GFX::PipelineType::Graphics;
+
+	GFX::DependencyDescription dependencyDesc0 = {};
+	dependencyDesc0.srcSubpass = 0;
+	dependencyDesc0.dstSubpass = 1;
+	dependencyDesc0.srcStage = GFX::PipelineStage::ColorAttachmentOutput;
+	dependencyDesc0.dstStage = GFX::PipelineStage::FragmentShader;
+	dependencyDesc0.srcAccess = GFX::Access::ColorAttachmentWrite;
+	dependencyDesc0.dstAccess = GFX::Access::ShaderRead;
+
+	GFX::DependencyDescription dependencyDesc1 = {};
+	dependencyDesc1.srcSubpass = 1;
+	dependencyDesc1.dstSubpass = 2;
+	dependencyDesc1.srcStage = GFX::PipelineStage::ColorAttachmentOutput;
+	dependencyDesc1.dstStage = GFX::PipelineStage::FragmentShader;
+	dependencyDesc1.srcAccess = GFX::Access::ColorAttachmentWrite;
+	dependencyDesc1.dstAccess = GFX::Access::ShaderRead;
 
 	GFX::RenderPassDescription renderPassDesc = {};
 	renderPassDesc.width = s_width;
 	renderPassDesc.height = s_height;
 
 	renderPassDesc.attachments.push_back(swapChainAttachment);
+	renderPassDesc.attachments.push_back(gBufferAlbedoAttachment);
+	renderPassDesc.attachments.push_back(gBufferNormalRoughnessAttachment);
+	renderPassDesc.attachments.push_back(gBufferPositionAttachment);
+	renderPassDesc.attachments.push_back(hdrAttachment);
 	renderPassDesc.attachments.push_back(depthAttachment);
 
-	renderPassDesc.subpasses.push_back(subPassSwapChain);
+	renderPassDesc.subpasses.push_back(subpassGBuffer);
+	renderPassDesc.subpasses.push_back(subpassGather);
+	renderPassDesc.subpasses.push_back(subpassPresent);
+
+	renderPassDesc.dependencies.push_back(dependencyDesc0);
+	renderPassDesc.dependencies.push_back(dependencyDesc1);
 
 	return GFX::CreateRenderPass(renderPassDesc);
 }
@@ -646,7 +560,7 @@ GFX::RenderPass CreateRenderPass()
 	return GFX::CreateRenderPass(renderPassDesc);
 }
 
-GFX::Pipeline CreateMeshPipeline()
+void CreateMeshPipeline()
 {
 	GFX::VertexBindings vertexBindings = {};
 	vertexBindings.SetBindingPosition(0);
@@ -659,32 +573,81 @@ GFX::Pipeline CreateMeshPipeline()
 	GFX::UniformBindings uniformBindings = {};
 	uniformBindings.AddUniformLayout(s_modelUniform->uniformLayout);
 
-	GFX::ShaderDescription vertDesc = {};
-	vertDesc.name = "default";
-	vertDesc.codes = StringUtils::ReadFile("screen-space-reflection/default.vert");
-	vertDesc.stage = GFX::ShaderStage::Vertex;
+	s_meshPipelineObject = new PipelineObject();
+	s_meshPipelineObject->Build(s_meshRenderPass, 0, 1, vertexBindings, uniformBindings, "screen-space-reflection/default.vert", "screen-space-reflection/default.frag", true);
+}
 
-	s_meshVertShader = GFX::CreateShader(vertDesc);
+void CreateMeshMRTPipeline()
+{
+	GFX::VertexBindings vertexBindings = {};
+	vertexBindings.SetBindingPosition(0);
+	vertexBindings.SetBindingType(GFX::BindingType::Vertex);
+	vertexBindings.SetStrideSize(sizeof(Vertex));
+	vertexBindings.AddAttribute(0, offsetof(Vertex, position), GFX::ValueType::Float32x3);
+	vertexBindings.AddAttribute(1, offsetof(Vertex, normal), GFX::ValueType::Float32x3);
+	vertexBindings.AddAttribute(2, offsetof(Vertex, uv), GFX::ValueType::Float32x2);
 
-	GFX::ShaderDescription fragDesc = {};
-	fragDesc.name = "default";
-	fragDesc.codes = StringUtils::ReadFile("screen-space-reflection/default.frag");
-	fragDesc.stage = GFX::ShaderStage::Fragment;
+	GFX::UniformBindings uniformBindings = {};
+	uniformBindings.AddUniformLayout(s_modelUniform->uniformLayout);
 
-	s_meshFragShader = GFX::CreateShader(fragDesc);
+	s_meshMRTPipelineObject = new PipelineObject();
+	s_meshMRTPipelineObject->Build(s_meshRenderPass, 0, 3, vertexBindings, uniformBindings, "screen-space-reflection/default.vert", "screen-space-reflection/defaultMRT.frag", true);
+}
 
-	GFX::GraphicsPipelineDescription pipelineDesc = {};
-	pipelineDesc.enableDepthTest = true;
-	pipelineDesc.enableStencilTest = false;
-	pipelineDesc.primitiveTopology = GFX::PrimitiveTopology::TriangleList;
-	pipelineDesc.renderPass = s_meshRenderPass;
-	pipelineDesc.subpass = 0;
-	pipelineDesc.vertexBindings = vertexBindings;
-	pipelineDesc.uniformBindings = uniformBindings;
-	pipelineDesc.shaders.push_back(s_meshVertShader);
-	pipelineDesc.shaders.push_back(s_meshFragShader);
+void CreateGatheringPipeline()
+{
+	// Uniform Layout
+	GFX::UniformLayoutDescription uniformLayoutDescription = {};
+	uniformLayoutDescription.AddUniformBinding(0, GFX::UniformType::SampledImage, GFX::ShaderStage::Fragment, 1);
+	uniformLayoutDescription.AddUniformBinding(1, GFX::UniformType::SampledImage, GFX::ShaderStage::Fragment, 1);
+	uniformLayoutDescription.AddUniformBinding(2, GFX::UniformType::SampledImage, GFX::ShaderStage::Fragment, 1);
 
-	return GFX::CreatePipeline(pipelineDesc);
+    s_gatherUniformLayout =	GFX::CreateUniformLayout(uniformLayoutDescription);
+
+	// Uniform
+	GFX::UniformDescription uniformDesc = {};
+	uniformDesc.AddSampledAttachmentAttribute(0, s_meshRenderPass, 1, s_nearestSampler);
+	uniformDesc.AddSampledAttachmentAttribute(1, s_meshRenderPass, 2, s_nearestSampler);
+	uniformDesc.AddSampledAttachmentAttribute(2, s_meshRenderPass, 3, s_nearestSampler);
+
+	uniformDesc.SetUniformLayout(s_gatherUniformLayout);
+	uniformDesc.SetStorageMode(GFX::UniformStorageMode::Dynamic);
+
+	s_gatherUniform = GFX::CreateUniform(uniformDesc);
+
+	GFX::VertexBindings vertexBindings = {};
+
+	GFX::UniformBindings uniformBindings = {};
+	uniformBindings.AddUniformLayout(s_gatherUniformLayout);
+
+	s_gatherPipelineObject = new PipelineObject();
+	s_gatherPipelineObject->Build(s_meshRenderPass, 1, 1, vertexBindings, uniformBindings, "screen-space-reflection/screen_quad.vert", "screen-space-reflection/gather_pass.frag", false);
+}
+
+void CreatePresentPipeline()
+{
+	// Uniform Layout
+	GFX::UniformLayoutDescription uniformLayoutDescription = {};
+	uniformLayoutDescription.AddUniformBinding(0, GFX::UniformType::SampledImage, GFX::ShaderStage::Fragment, 1);
+
+	s_presentUniformLayout = GFX::CreateUniformLayout(uniformLayoutDescription);
+
+	// Uniform
+	GFX::UniformDescription uniformDesc = {};
+	// HDR attachment 
+	uniformDesc.AddSampledAttachmentAttribute(0, s_meshRenderPass, 4, s_nearestSampler);
+	uniformDesc.SetUniformLayout(s_presentUniformLayout);
+	uniformDesc.SetStorageMode(GFX::UniformStorageMode::Dynamic);
+
+	s_presentUniform = GFX::CreateUniform(uniformDesc);
+
+	GFX::VertexBindings vertexBindings = {};
+
+	GFX::UniformBindings uniformBindings = {};
+	uniformBindings.AddUniformLayout(s_presentUniformLayout);
+
+	s_presentPipelineObject = new PipelineObject();
+	s_presentPipelineObject->Build(s_meshRenderPass, 2, 1, vertexBindings, uniformBindings, "screen-space-reflection/screen_quad.vert", "screen-space-reflection/present_pass.frag", false);
 }
 
 int main(int, char** args)
@@ -712,7 +675,6 @@ void ScreenSpaceReflectionExample::Init()
 
 	glfwSetFramebufferSizeCallback(m_window, framebufferResizeCallback);
 
-	glfwSetKeyCallback(m_window, KeyCallback);
 	glfwSetCursorPosCallback(m_window, MouseCallback);
 
 	GFX::InitialDescription initDesc = {};
@@ -721,12 +683,35 @@ void ScreenSpaceReflectionExample::Init()
 
 	GFX::Init(initDesc);
 
-	s_scene = LoadScene("screen-space-reflection/TEST7WithRiver.fbx");
+	glm::vec3 minP;
+	glm::vec3 maxP;
+	s_scene = LoadScene("screen-space-reflection/TEST7WithRiver.fbx", minP, maxP);
+
+	target = 0.5f * (minP + maxP);
+	radius = 1.5f * Math::Max(Math::Max(maxP.x - minP.x, maxP.y - minP.y), maxP.z - minP.z);
 	
 	CreateModelUniformBlock("screen-space-reflection/texture.jpg");
 
-	s_meshRenderPass = CreateRenderPass();
-	s_meshPipeline = CreateMeshPipeline();
+	s_meshRenderPass = CreateScreenSpaceReflectionRenderPass();
+
+	GFX::SamplerDescription nearestSamplerDesc = {};
+	nearestSamplerDesc.minFilter = GFX::FilterMode::Nearest;
+	nearestSamplerDesc.magFilter = GFX::FilterMode::Nearest;
+	nearestSamplerDesc.wrapU = GFX::WrapMode::ClampToEdge;
+	nearestSamplerDesc.wrapV = GFX::WrapMode::ClampToEdge;
+	s_nearestSampler = GFX::CreateSampler(nearestSamplerDesc);
+
+	GFX::SamplerDescription linearSamplerDesc = {};
+	linearSamplerDesc.minFilter = GFX::FilterMode::Linear;
+	linearSamplerDesc.magFilter = GFX::FilterMode::Linear;
+	linearSamplerDesc.wrapU = GFX::WrapMode::ClampToEdge;
+	linearSamplerDesc.wrapV = GFX::WrapMode::ClampToEdge;
+	s_linearSampler = GFX::CreateSampler(nearestSamplerDesc);
+	
+	// CreateMeshPipeline();
+	CreateMeshMRTPipeline();
+	CreateGatheringPipeline();
+	CreatePresentPipeline();
 
 	skybox = Skybox::Create();
 }
@@ -755,14 +740,13 @@ void ScreenSpaceReflectionExample::MainLoop()
 
 			GFX::UpdateUniformBuffer(s_modelUniform->uniform, 0, &ubo);
 
-			GFX::ApplyPipeline(skybox->pipeline);
-			// sky box
-			GFX::BindUniform(skybox->uniform, 0);
-			GFX::BindVertexBuffer(skybox->vertexBuffer, 0);
-			GFX::Draw(108, 1, 0, 0);
+			//GFX::ApplyPipeline(skybox->pipeline);
+			//// sky box
+			//GFX::BindUniform(skybox->uniform, 0);
+			//GFX::BindVertexBuffer(skybox->vertexBuffer, 0);
+			//GFX::Draw(108, 1, 0, 0);
 
-			GFX::ApplyPipeline(s_meshPipeline);
-			// scene
+			GFX::ApplyPipeline(s_meshMRTPipelineObject->pipeline);
 			GFX::BindUniform(s_modelUniform->uniform, 0);
 			for (auto mesh : s_scene->meshes)
 			{
@@ -770,6 +754,16 @@ void ScreenSpaceReflectionExample::MainLoop()
 				GFX::BindVertexBuffer(mesh->vertexBuffer, 0);
 				GFX::DrawIndexed(mesh->indices.size(), 1, 0);
 			}
+
+			GFX::NextRenderPass();
+			GFX::ApplyPipeline(s_gatherPipelineObject->pipeline);
+			GFX::BindUniform(s_gatherUniform, 0);
+			GFX::Draw(3, 1, 0, 0);
+
+			GFX::NextRenderPass();
+			GFX::ApplyPipeline(s_presentPipelineObject->pipeline);
+			GFX::BindUniform(s_presentUniform, 0);
+			GFX::Draw(3, 1, 0, 0);
 
 			GFX::EndRenderPass();
 
@@ -783,11 +777,21 @@ void ScreenSpaceReflectionExample::CleanUp()
 	delete skybox;
 	DestroyScene(s_scene);
 	delete s_modelUniform;
-	GFX::DestroyPipeline(s_meshPipeline);
-	GFX::DestroyRenderPass(s_meshRenderPass);
 
-	GFX::DestroyShader(s_meshVertShader);
-	GFX::DestroyShader(s_meshFragShader);
+	GFX::DestroyRenderPass(s_meshRenderPass);
+	
+	PipelineObject::Destroy(s_meshMRTPipelineObject);
+	PipelineObject::Destroy(s_gatherPipelineObject);
+	PipelineObject::Destroy(s_presentPipelineObject);
+
+	GFX::DestroyUniformLayout(s_gatherUniformLayout);
+	GFX::DestroyUniform(s_gatherUniform);
+
+	GFX::DestroyUniformLayout(s_presentUniformLayout);
+	GFX::DestroyUniform(s_presentUniform);
+
+	GFX::DestroySampler(s_nearestSampler);
+	GFX::DestroySampler(s_linearSampler);
 
 	GFX::Shutdown();
 }

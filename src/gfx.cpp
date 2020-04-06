@@ -319,16 +319,6 @@ namespace GFX
                 dependencies[i].setDependencyFlags(vk::DependencyFlagBits::eByRegion);
             }
 
-         /*   vk::SubpassDependency dependency = {};
-            dependency.setSrcSubpass(VK_SUBPASS_EXTERNAL);
-            dependency.setDstSubpass(0);
-            dependency.setSrcStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput);
-            dependency.setDstStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput);
-            dependency.setSrcAccessMask({});
-            dependency.setDstAccessMask(vk::AccessFlagBits::eColorAttachmentWrite);
-
-            dependencies.push_back(dependency);*/
-
             vk::RenderPassCreateInfo renderPassCreateInfo = {};
             renderPassCreateInfo.setAttachmentCount(attachmentDescs.size());
             renderPassCreateInfo.setPAttachments(attachmentDescs.data());
@@ -740,6 +730,8 @@ namespace GFX
     {
         PipelineResource(const GraphicsPipelineDescription& desc)
         {
+            RenderPassResource* renderPassResource = s_renderPassHandlePool.FetchResource(desc.renderPass.id);
+
             std::vector<vk::PipelineShaderStageCreateInfo> shaderStageCreateInfos = {};
             for (auto shader : desc.shaders)
             {
@@ -799,14 +791,31 @@ namespace GFX
             multisampleStateCreateInfo.setSampleShadingEnable(false);
             multisampleStateCreateInfo.setRasterizationSamples(vk::SampleCountFlagBits::e1);
 
-            vk::PipelineColorBlendAttachmentState colorBlendAttachmentState = {};
-            colorBlendAttachmentState.setColorWriteMask(vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA);
-            colorBlendAttachmentState.setBlendEnable(false);
+            std::vector<vk::PipelineColorBlendAttachmentState> colorBlendAttachmentStates = {};
+
+            // TODO Blend States
+            for (auto blendState: desc.blendStates)
+            {
+                vk::PipelineColorBlendAttachmentState colorBlendAttachmentState = {};
+                colorBlendAttachmentState.setColorWriteMask(vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA);
+                colorBlendAttachmentState.setBlendEnable(false);
+
+                colorBlendAttachmentStates.push_back(colorBlendAttachmentState);
+            }
+
+            if (desc.blendStates.size() == 0)
+            {
+                vk::PipelineColorBlendAttachmentState colorBlendAttachmentState = {};
+                colorBlendAttachmentState.setColorWriteMask(vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA);
+                colorBlendAttachmentState.setBlendEnable(false);
+
+                colorBlendAttachmentStates.push_back(colorBlendAttachmentState);
+            }
 
             vk::PipelineColorBlendStateCreateInfo colorBlendStateCreateInfo = {};
             colorBlendStateCreateInfo.setLogicOpEnable(false);
-            colorBlendStateCreateInfo.setAttachmentCount(1);
-            colorBlendStateCreateInfo.setPAttachments(&colorBlendAttachmentState);
+            colorBlendStateCreateInfo.setAttachmentCount(colorBlendAttachmentStates.size());
+            colorBlendStateCreateInfo.setPAttachments(colorBlendAttachmentStates.data());
 
             std::vector<vk::DynamicState> dynamicStates =
             {
@@ -847,8 +856,6 @@ namespace GFX
             pipelineCreateInfo.setPColorBlendState(&colorBlendStateCreateInfo);
             pipelineCreateInfo.setPDynamicState(&dynamicStateCreateInfo);
             pipelineCreateInfo.setLayout(m_pipelineLayout);
-
-            RenderPassResource* renderPassResource = s_renderPassHandlePool.FetchResource(desc.renderPass.id);
 
             pipelineCreateInfo.setRenderPass(renderPassResource->m_renderPass);
             pipelineCreateInfo.setSubpass(desc.subpass);
