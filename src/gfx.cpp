@@ -249,7 +249,7 @@ namespace GFX
                 }
                 else if (attachmentDesc.type == AttachmentType::Color)
                 {
-                    attachmentDescs[i].setFinalLayout(vk::ImageLayout::eColorAttachmentOptimal);
+                    attachmentDescs[i].setFinalLayout(vk::ImageLayout::eShaderReadOnlyOptimal);
                     m_attachmentDic[i] = CreateAttachment(attachmentDesc.width, attachmentDesc.height, MapFormatForVulkan(attachmentDesc.format), vk::ImageUsageFlagBits::eColorAttachment);
                 }
                 else

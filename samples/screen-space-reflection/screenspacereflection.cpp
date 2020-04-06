@@ -593,14 +593,16 @@ void CreatePresentPipeline()
 {
 	// Uniform Layout
 	GFX::UniformLayoutDescription uniformLayoutDescription = {};
-	uniformLayoutDescription.AddUniformBinding(0, GFX::UniformType::InputAttachment, GFX::ShaderStage::Fragment, 1);
+	// uniformLayoutDescription.AddUniformBinding(0, GFX::UniformType::InputAttachment, GFX::ShaderStage::Fragment, 1);
+	uniformLayoutDescription.AddUniformBinding(0, GFX::UniformType::SampledImage, GFX::ShaderStage::Fragment, 1);
 
 	s_presentUniformLayout = GFX::CreateUniformLayout(uniformLayoutDescription);
 
 	// Uniform
 	GFX::UniformDescription uniformDesc = {};
 	// HDR attachment 
-	uniformDesc.AddInputAttachmentAttribute(0, s_meshRenderPass, 4);
+	// uniformDesc.AddInputAttachmentAttribute(0, s_meshRenderPass, 4);
+	uniformDesc.AddSampledAttachmentAttribute(0, s_meshRenderPass, 4, s_nearestSampler);
 	uniformDesc.SetUniformLayout(s_presentUniformLayout);
 	uniformDesc.SetStorageMode(GFX::UniformStorageMode::Dynamic);
 
