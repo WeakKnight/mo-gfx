@@ -721,7 +721,7 @@ void ScreenSpaceReflectionExample::Init()
 
 	GFX::Init(initDesc);
 
-	s_scene = LoadScene("screen-space-reflection/TEST2.fbx");
+	s_scene = LoadScene("screen-space-reflection/TEST7WithRiver.fbx");
 	
 	CreateModelUniformBlock("screen-space-reflection/texture.jpg");
 
