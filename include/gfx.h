@@ -713,7 +713,7 @@ namespace GFX
     void SetScissor(float x, float y, float w, float h);
 
     void BeginRenderPass(RenderPass renderPass, int offsetX, int offsetY, int width, int height);
-    void NextRenderPass();
+    void NextSubpass();
     // void BeginDefaultRenderPass();
     void EndRenderPass();
 

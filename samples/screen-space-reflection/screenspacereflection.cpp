@@ -734,7 +734,7 @@ void ScreenSpaceReflectionExample::MainLoop()
 				GFX::DrawIndexed(mesh->indices.size(), 1, 0);
 			}
 
-			GFX::NextRenderPass();
+			GFX::NextSubpass();
 			GFX::ApplyPipeline(skybox->pipeline);
 			// sky box
 			GFX::BindUniform(skybox->uniform, 0);
@@ -745,7 +745,7 @@ void ScreenSpaceReflectionExample::MainLoop()
 			GFX::BindUniform(s_gatherUniform, 0);
 			GFX::Draw(3, 1, 0, 0);
 
-			GFX::NextRenderPass();
+			GFX::NextSubpass();
 			GFX::ApplyPipeline(s_presentPipelineObject->pipeline);
 			GFX::BindUniform(s_presentUniform, 0);
 			GFX::Draw(3, 1, 0, 0);

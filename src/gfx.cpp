@@ -2065,7 +2065,7 @@ namespace GFX
         s_commandBuffersDefault[s_currentImageIndex].beginRenderPass(renderPassBeginInfo, vk::SubpassContents::eInline);
     }
 
-    void NextRenderPass()
+    void NextSubpass()
     {
         s_commandBuffersDefault[s_currentImageIndex].nextSubpass(vk::SubpassContents::eInline);
     }

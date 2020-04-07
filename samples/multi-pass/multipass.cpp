@@ -356,7 +356,7 @@ void MultiPassExample::MainLoop()
 
 			GFX::DrawIndexed(indices.size(), 1, 0);
 
-			GFX::NextRenderPass();
+			GFX::NextSubpass();
 
 			GFX::ApplyPipeline(screenQuadPipeline);
 			GFX::BindUniform(screenQuadUniform, 0);
