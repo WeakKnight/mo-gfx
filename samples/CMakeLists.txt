@@ -57,6 +57,14 @@ target_link_libraries("screen-space-reflection" spdlog glfw ${GLFW_LIBRARIES} gl
 
 set_property(TARGET "screen-space-reflection" PROPERTY FOLDER "mo-gfx-samples")
 
+#Raytracing Example
+file(GLOB RT_HEADERS "./include/*.h" "./raytracing/*.h")
+file(GLOB RT_SOURCES "./src/*.cpp" "./raytracing/*.cpp")
+
+add_executable("raytracing" ${RT_SOURCES} ${RT_HEADERS})
+target_link_libraries("raytracing" spdlog glfw ${GLFW_LIBRARIES} glm mo-gfx assimp)
+
+set_property(TARGET "raytracing" PROPERTY FOLDER "mo-gfx-samples")
 
 
 
