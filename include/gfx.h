@@ -64,9 +64,15 @@ namespace GFX
         std::list<uint32_t> m_avaliableHandleList;
     };
 
+    enum class Extension
+    {
+        Raytracing
+    };
+
     struct InitialDescription
     {
         bool debugMode = false;
+        std::vector<Extension> extensions;
         GLFWwindow* window = nullptr;
     };
 

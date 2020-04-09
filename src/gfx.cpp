@@ -1,7 +1,11 @@
 #include "gfx.h"
 #define VULKAN_HPP_ASSERT
 #define VULKAN_HPP_NO_EXCEPTIONS
+
+#define VK_ENABLE_BETA_EXTENSIONS
+#include <vulkan/vulkan_beta.h>
 #include <vulkan/vulkan.hpp>
+
 #include <GLFW/glfw3.h>
 #include <shaderc/shaderc.hpp>
 #include <map>
@@ -151,6 +155,8 @@ namespace GFX
     {
         VK_KHR_SWAPCHAIN_EXTENSION_NAME
     };
+
+    vk::PhysicalDeviceRayTracingPropertiesKHR s_rayTracingProperties;
 
     /*
     =============================================Internal Interface Declaration====================================================
@@ -1854,6 +1860,26 @@ namespace GFX
 
     void Init(const InitialDescription& desc)
     {
+        std::map<const char*, const char*> instanceExtensions;
+        std::map<const char*, const char*> deviceExtensions;
+
+        for (auto extensionName : s_expectedExtensions)
+        {
+            deviceExtensions[extensionName] = extensionName;
+        }
+
+        for (auto extension : desc.extensions)
+        {
+            if (extension == GFX::Extension::Raytracing)
+            {
+                instanceExtensions[VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME] = VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME;
+                deviceExtensions[VK_KHR_RAY_TRACING_EXTENSION_NAME] = VK_KHR_RAY_TRACING_EXTENSION_NAME;
+                deviceExtensions[VK_KHR_MAINTENANCE3_EXTENSION_NAME] = VK_KHR_MAINTENANCE3_EXTENSION_NAME;
+                deviceExtensions[VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME] = VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME;
+                deviceExtensions[VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME] = VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME;
+            }
+        }
+
         auto enumerateInstanceExtensionPropsResult = vk::enumerateInstanceExtensionProperties();
         VK_ASSERT(enumerateInstanceExtensionPropsResult);
         s_extensions = enumerateInstanceExtensionPropsResult.value;
@@ -1867,7 +1893,7 @@ namespace GFX
         appInfo.setApplicationVersion(VK_MAKE_VERSION(0, 0, 1));
         appInfo.setPEngineName("MO");
         appInfo.setEngineVersion(VK_MAKE_VERSION(0, 0, 1));
-        appInfo.setApiVersion(VK_API_VERSION_1_1);
+        appInfo.setApiVersion(VK_API_VERSION_1_2);
 
         vk::InstanceCreateInfo createInfo = vk::InstanceCreateInfo();
         createInfo.setPApplicationInfo(&appInfo);
@@ -1875,8 +1901,19 @@ namespace GFX
         uint32_t glfwExtensionCount = 0;
         const char** glfwExtensions;
         glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
-        createInfo.setEnabledExtensionCount(glfwExtensionCount);
-        createInfo.setPpEnabledExtensionNames(glfwExtensions);
+        for (int i = 0; i < glfwExtensionCount; i++)
+        {
+            instanceExtensions[glfwExtensions[i]] = glfwExtensions[i];
+        }
+        
+        std::vector<const char*> finalInstanceExtensions;
+        for (auto& pair : instanceExtensions)
+        {
+            finalInstanceExtensions.push_back(pair.second);
+        }
+
+        createInfo.setEnabledExtensionCount(finalInstanceExtensions.size());
+        createInfo.setPpEnabledExtensionNames(finalInstanceExtensions.data());
 
         if (desc.debugMode)
         {
@@ -1954,9 +1991,17 @@ namespace GFX
         vk::DeviceCreateInfo deviceCreateInfo = {};
         deviceCreateInfo.setQueueCreateInfoCount(queueCreateInfos.size());
         deviceCreateInfo.setPQueueCreateInfos(queueCreateInfos.data());
+
+        for (auto& pair : deviceExtensions)
+        {
+            s_expectedExtensions.push_back(pair.second);
+        }
+
         deviceCreateInfo.setEnabledExtensionCount(s_expectedExtensions.size());
         deviceCreateInfo.setPpEnabledExtensionNames(s_expectedExtensions.data());
         deviceCreateInfo.setPEnabledFeatures(&deviceFeatures);
+
+        auto allDeviceExtensions = s_physicalDevice.enumerateDeviceExtensionProperties();
 
         auto createDeviceResult = s_physicalDevice.createDevice(deviceCreateInfo);
         VK_ASSERT(createDeviceResult);
@@ -1976,6 +2021,15 @@ namespace GFX
         CreateCommandBuffersDefault();
         CreateSyncObjects();
         CreateDescriptorPoolDefault();
+
+        for (auto extension : desc.extensions)
+        {
+            if (extension == GFX::Extension::Raytracing)
+            {
+                auto props = s_physicalDevice.getProperties2<vk::PhysicalDeviceProperties2, vk::PhysicalDeviceRayTracingPropertiesKHR>();
+                s_rayTracingProperties = props.get<vk::PhysicalDeviceRayTracingPropertiesKHR>();
+            }
+        }
     }
 
     void Resize(int width, int height)

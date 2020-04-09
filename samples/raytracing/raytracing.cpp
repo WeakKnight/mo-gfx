@@ -593,7 +593,7 @@ int main(int, char** args)
 {
 	InitEnvironment(args);
 
-	App* app = new ModelViewerExample();
+	App* app = new RaytracingExample();
 	app->Run();
 
 	delete app;
@@ -603,7 +603,7 @@ int main(int, char** args)
 
 void RaytracingExample::Init()
 {
-	spdlog::info("Hello Model Viewer");
+	spdlog::info("Hello Raytracing");
 
 	glfwInit();
 
@@ -620,6 +620,7 @@ void RaytracingExample::Init()
 	GFX::InitialDescription initDesc = {};
 	initDesc.debugMode = true;
 	initDesc.window = m_window;
+	initDesc.extensions.push_back(GFX::Extension::Raytracing);
 
 	GFX::Init(initDesc);
 
