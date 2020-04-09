@@ -635,6 +635,13 @@ void RaytracingExample::Init()
 	s_meshPipeline = CreateMeshPipeline();
 
 	skybox = Skybox::Create();
+
+	GFX::ShaderDescription rayGenShaderDesc = {};
+	rayGenShaderDesc.codes = StringUtils::ReadFile("raytracing/raytrace.rgen");
+	rayGenShaderDesc.name = "rayGen";
+	rayGenShaderDesc.stage = GFX::ShaderStage::RayGen;
+
+	GFX::Shader rayGenShader = GFX::CreateShader(rayGenShaderDesc);
 }
 
 void RaytracingExample::MainLoop()

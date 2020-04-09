@@ -280,7 +280,11 @@ namespace GFX
         Vertex,
         Fragment,
         Compute,
-        All,
+        ClosetHit,
+        Miss,
+        RayGen,
+        Intersection,
+        AnyHit,
         None
     };
 

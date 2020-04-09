@@ -7,7 +7,10 @@
 #include <vulkan/vulkan.hpp>
 
 #include <GLFW/glfw3.h>
+
+#define NV_EXTENSIONS
 #include <shaderc/shaderc.hpp>
+
 #include <map>
 #include <assert.h>
 #include <stdio.h>
@@ -647,6 +650,8 @@ namespace GFX
                 return shaderc_shader_kind::shaderc_compute_shader;
             case ShaderStage::Fragment:
                 return shaderc_shader_kind::shaderc_fragment_shader;
+            case ShaderStage::RayGen:
+                return shaderc_shader_kind::shaderc_raygen_shader;
             default:
                 return shaderc_shader_kind::shaderc_glsl_infer_from_source;
             }
@@ -2484,6 +2489,16 @@ namespace GFX
             return vk::ShaderStageFlagBits::eCompute;
         case ShaderStage::Fragment:
             return vk::ShaderStageFlagBits::eFragment;
+        case ShaderStage::AnyHit:
+            return vk::ShaderStageFlagBits::eAnyHitKHR;
+        case ShaderStage::ClosetHit:
+            return vk::ShaderStageFlagBits::eClosestHitKHR;
+        case ShaderStage::Intersection:
+            return vk::ShaderStageFlagBits::eIntersectionKHR;
+        case ShaderStage::Miss:
+            return vk::ShaderStageFlagBits::eMissKHR;
+        case ShaderStage::RayGen:
+            return vk::ShaderStageFlagBits::eRaygenKHR;
         default:
             return vk::ShaderStageFlagBits::eAll;
         }

@@ -126,6 +126,8 @@ const spirv_cross::SmallVector<spirv_cross::Resource>* get_shader_resources(
       return &(resources.separate_samplers);
     case shaderc_spvc_shader_resource_storage_buffers:
       return &(resources.storage_buffers);
+    case shaderc_spvc_shader_resource_storage_images:
+      return &(resources.storage_images);
   }
 
   // Older gcc doesn't recognize that all of the possible cases are covered
@@ -170,6 +172,136 @@ shaderc_spvc_texture_format_type spirv_cross_base_type_to_texture_format_type(
     default:
       return shaderc_spvc_texture_format_type_other;
   }
+}
+
+shaderc_spvc_storage_texture_format spv_image_format_to_storage_texture_format(
+    spv::ImageFormat format) {
+  switch (format) {
+    case spv::ImageFormatR8:
+      return shaderc_spvc_storage_texture_format_r8unorm;
+    case spv::ImageFormatR8Snorm:
+      return shaderc_spvc_storage_texture_format_r8snorm;
+    case spv::ImageFormatR8ui:
+      return shaderc_spvc_storage_texture_format_r8uint;
+    case spv::ImageFormatR8i:
+      return shaderc_spvc_storage_texture_format_r8sint;
+    case spv::ImageFormatR16ui:
+      return shaderc_spvc_storage_texture_format_r16uint;
+    case spv::ImageFormatR16i:
+      return shaderc_spvc_storage_texture_format_r16sint;
+    case spv::ImageFormatR16f:
+      return shaderc_spvc_storage_texture_format_r16float;
+    case spv::ImageFormatRg8:
+      return shaderc_spvc_storage_texture_format_rg8unorm;
+    case spv::ImageFormatRg8Snorm:
+      return shaderc_spvc_storage_texture_format_rg8snorm;
+    case spv::ImageFormatRg8ui:
+      return shaderc_spvc_storage_texture_format_rg8uint;
+    case spv::ImageFormatRg8i:
+      return shaderc_spvc_storage_texture_format_rg8sint;
+    case spv::ImageFormatR32f:
+      return shaderc_spvc_storage_texture_format_r32float;
+    case spv::ImageFormatR32ui:
+      return shaderc_spvc_storage_texture_format_r32uint;
+    case spv::ImageFormatR32i:
+      return shaderc_spvc_storage_texture_format_r32sint;
+    case spv::ImageFormatRg16ui:
+      return shaderc_spvc_storage_texture_format_rg16uint;
+    case spv::ImageFormatRg16i:
+      return shaderc_spvc_storage_texture_format_rg16sint;
+    case spv::ImageFormatRg16f:
+      return shaderc_spvc_storage_texture_format_rg16float;
+    case spv::ImageFormatRgba8:
+      return shaderc_spvc_storage_texture_format_rgba8unorm;
+    case spv::ImageFormatRgba8Snorm:
+      return shaderc_spvc_storage_texture_format_rgba8snorm;
+    case spv::ImageFormatRgba8ui:
+      return shaderc_spvc_storage_texture_format_rgba8uint;
+    case spv::ImageFormatRgba8i:
+      return shaderc_spvc_storage_texture_format_rgba8sint;
+    case spv::ImageFormatRgb10A2:
+      return shaderc_spvc_storage_texture_format_rgb10a2unorm;
+    case spv::ImageFormatR11fG11fB10f:
+      return shaderc_spvc_storage_texture_format_rg11b10float;
+    case spv::ImageFormatRg32f:
+      return shaderc_spvc_storage_texture_format_rg32float;
+    case spv::ImageFormatRg32ui:
+      return shaderc_spvc_storage_texture_format_rg32uint;
+    case spv::ImageFormatRg32i:
+      return shaderc_spvc_storage_texture_format_rg32sint;
+    case spv::ImageFormatRgba16ui:
+      return shaderc_spvc_storage_texture_format_rgba16uint;
+    case spv::ImageFormatRgba16i:
+      return shaderc_spvc_storage_texture_format_rgba16sint;
+    case spv::ImageFormatRgba16f:
+      return shaderc_spvc_storage_texture_format_rgba16float;
+    case spv::ImageFormatRgba32f:
+      return shaderc_spvc_storage_texture_format_rgba32float;
+    case spv::ImageFormatRgba32ui:
+      return shaderc_spvc_storage_texture_format_rgba32uint;
+    case spv::ImageFormatRgba32i:
+      return shaderc_spvc_storage_texture_format_rgba32sint;
+    default:
+      return shaderc_spvc_storage_texture_format_undefined;
+  }
+}
+
+spv_target_env shaderc_spvc_spv_env_to_spv_target_env(
+    shaderc_spvc_spv_env env) {
+  switch (env) {
+    case shaderc_spvc_spv_env_universal_1_0:
+      return SPV_ENV_UNIVERSAL_1_0;
+    case shaderc_spvc_spv_env_vulkan_1_0:
+      return SPV_ENV_VULKAN_1_0;
+    case shaderc_spvc_spv_env_universal_1_1:
+      return SPV_ENV_UNIVERSAL_1_1;
+    case shaderc_spvc_spv_env_opencl_2_1:
+      return SPV_ENV_OPENCL_2_1;
+    case shaderc_spvc_spv_env_opencl_2_2:
+      return SPV_ENV_OPENCL_2_2;
+    case shaderc_spvc_spv_env_opengl_4_0:
+      return SPV_ENV_OPENGL_4_0;
+    case shaderc_spvc_spv_env_opengl_4_1:
+      return SPV_ENV_OPENGL_4_1;
+    case shaderc_spvc_spv_env_opengl_4_2:
+      return SPV_ENV_OPENGL_4_2;
+    case shaderc_spvc_spv_env_opengl_4_3:
+      return SPV_ENV_OPENGL_4_3;
+    case shaderc_spvc_spv_env_opengl_4_5:
+      return SPV_ENV_OPENGL_4_5;
+    case shaderc_spvc_spv_env_universal_1_2:
+      return SPV_ENV_UNIVERSAL_1_2;
+    case shaderc_spvc_spv_env_opencl_1_2:
+      return SPV_ENV_OPENCL_1_2;
+    case shaderc_spvc_spv_env_opencl_embedded_1_2:
+      return SPV_ENV_OPENCL_EMBEDDED_1_2;
+    case shaderc_spvc_spv_env_opencl_2_0:
+      return SPV_ENV_OPENCL_2_0;
+    case shaderc_spvc_spv_env_opencl_embedded_2_0:
+      return SPV_ENV_OPENCL_EMBEDDED_2_0;
+    case shaderc_spvc_spv_env_opencl_embedded_2_1:
+      return SPV_ENV_OPENCL_EMBEDDED_2_1;
+    case shaderc_spvc_spv_env_opencl_embedded_2_2:
+      return SPV_ENV_OPENCL_EMBEDDED_2_2;
+    case shaderc_spvc_spv_env_universal_1_3:
+      return SPV_ENV_UNIVERSAL_1_3;
+    case shaderc_spvc_spv_env_vulkan_1_1:
+      return SPV_ENV_VULKAN_1_1;
+    case shaderc_spvc_spv_env_webgpu_0:
+      return SPV_ENV_WEBGPU_0;
+    case shaderc_spvc_spv_env_universal_1_4:
+      return SPV_ENV_UNIVERSAL_1_4;
+    case shaderc_spvc_spv_env_vulkan_1_1_spirv_1_4:
+      return SPV_ENV_VULKAN_1_1_SPIRV_1_4;
+    case shaderc_spvc_spv_env_universal_1_5:
+      return SPV_ENV_UNIVERSAL_1_5;
+    case shaderc_spvc_spv_env_vulkan_1_2:
+      return SPV_ENV_VULKAN_1_2;
+  }
+  shaderc_spvc::ErrorLog(nullptr)
+      << "Attempted to convert unknown shaderc_spvc_spv_env value, " << env;
+  assert(false);
+  return SPV_ENV_UNIVERSAL_1_0;
 }
 
 shaderc_spvc_status get_location_info_impl(
@@ -235,11 +367,14 @@ shaderc_spvc_status shaderc_spvc_context_set_use_spvc_parser(
   return shaderc_spvc_status_success;
 }
 
-shaderc_spvc_compile_options_t shaderc_spvc_compile_options_create() {
+shaderc_spvc_compile_options_t shaderc_spvc_compile_options_create(
+    shaderc_spvc_spv_env source_env, shaderc_spvc_spv_env target_env) {
   shaderc_spvc_compile_options_t options =
       new (std::nothrow) shaderc_spvc_compile_options;
   if (options) {
     options->glsl.version = 0;
+    options->source_env = shaderc_spvc_spv_env_to_spv_target_env(source_env);
+    options->target_env = shaderc_spvc_spv_env_to_spv_target_env(target_env);
   }
   return options;
 }
@@ -247,7 +382,7 @@ shaderc_spvc_compile_options_t shaderc_spvc_compile_options_create() {
 shaderc_spvc_compile_options_t shaderc_spvc_compile_options_clone(
     shaderc_spvc_compile_options_t options) {
   if (options) return new (std::nothrow) shaderc_spvc_compile_options(*options);
-  return shaderc_spvc_compile_options_create();
+  return nullptr;
 }
 
 void shaderc_spvc_compile_options_destroy(
@@ -255,6 +390,7 @@ void shaderc_spvc_compile_options_destroy(
   if (options) delete options;
 }
 
+// DEPRECATED
 shaderc_spvc_status shaderc_spvc_compile_options_set_source_env(
     shaderc_spvc_compile_options_t options, shaderc_target_env env,
     shaderc_env_version version) {
@@ -264,6 +400,7 @@ shaderc_spvc_status shaderc_spvc_compile_options_set_source_env(
   return shaderc_spvc_status_success;
 }
 
+// DEPRECATED
 shaderc_spvc_status shaderc_spvc_compile_options_set_target_env(
     shaderc_spvc_compile_options_t options, shaderc_target_env env,
     shaderc_env_version version) {
@@ -344,6 +481,15 @@ shaderc_spvc_compile_options_set_flatten_multidimensional_arrays(
   CHECK_OPTIONS(nullptr, options);
 
   options->glsl.flatten_multidimensional_arrays = b;
+  return shaderc_spvc_status_success;
+}
+
+shaderc_spvc_status
+shaderc_spvc_compile_options_set_force_zero_initialized_variables(
+    shaderc_spvc_compile_options_t options, bool b) {
+  CHECK_OPTIONS(nullptr, options);
+
+  options->glsl.force_zero_initialized_variables = b;
   return shaderc_spvc_status_success;
 }
 
@@ -901,6 +1047,38 @@ shaderc_spvc_status shaderc_spvc_get_binding_info(
               shaderc_spvc_binding_type_readonly_storage_buffer;
         } else {
           bindings->binding_type = shaderc_spvc_binding_type_storage_buffer;
+        }
+      } break;
+      case shaderc_spvc_binding_type_storage_texture: {
+        spirv_cross::Bitset flags = compiler->get_decoration_bitset(shader_resource.id);
+        if (flags.get(spv::DecorationNonReadable)) {
+          bindings->binding_type = shaderc_spvc_binding_type_writeonly_storage_texture;
+        } else if (flags.get(spv::DecorationNonWritable)) {
+            bindings->binding_type = shaderc_spvc_binding_type_readonly_storage_texture;
+        } else {
+            bindings->binding_type = shaderc_spvc_binding_type_storage_texture;
+        }
+        spirv_cross::SPIRType::ImageType imageType =
+            compiler->get_type(bindings->base_type_id).image;
+        bindings->storage_texture_format =
+            spv_image_format_to_storage_texture_format(imageType.format);
+        bindings->texture_dimension = spirv_dim_to_texture_view_dimension(
+            imageType.dim, imageType.arrayed);
+        bindings->multisampled = imageType.ms;
+      } break;
+      case shaderc_spvc_binding_type_sampler: {
+        // The inheritance hierarchy here is odd, it goes
+        // Compiler->CompilerGLSL->Compiler*. CompilerGLSL is an intermediate
+        // super class for all of the other leaf classes. The method we need is
+        // defined on CompilerGLSL, not Compiler.
+        // This cast is safe, since we only should ever have a CompilerGLSL or
+        // Compiler* in |cross_compiler|.
+        auto* glsl_compiler = reinterpret_cast<spirv_cross::CompilerGLSL*>(
+            context->cross_compiler.get());
+        if (glsl_compiler->variable_is_depth_or_compare(shader_resource.id)) {
+          bindings->binding_type = shaderc_spvc_binding_type_comparison_sampler;
+        } else {
+          bindings->binding_type = shaderc_spvc_binding_type_sampler;
         }
       } break;
       default:
