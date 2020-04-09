@@ -31,13 +31,15 @@ public:
 		GFX::DestroyUniform(uniform);
 		GFX::DestroyBuffer(buffer);
 		GFX::DestroySampler(sampler);
-		GFX::DestroyImage(image);
+		GFX::DestroyImage(albedoImage);
+		GFX::DestroyImage(roughnessImage);
 	}
 
 	GFX::Uniform uniform;
 	GFX::UniformLayout uniformLayout;
 	GFX::Buffer buffer;
-	GFX::Image image;
+	GFX::Image albedoImage;
+	GFX::Image roughnessImage;
 	GFX::Sampler sampler;
 };
 
@@ -52,6 +54,7 @@ struct GatheringPassUniformData
 	glm::vec4 lightDir;
 	glm::vec4 lightColor;
 	glm::mat4 view;
+	glm::mat4 proj;
 };
 
 const int WIDTH = 800;
@@ -62,6 +65,8 @@ static int s_height = HEIGHT;
 
 static Scene* s_scene = nullptr;
 static ModelUniformBlock* s_modelUniform = nullptr;
+static ModelUniformBlock* s_waterUniform = nullptr;
+
 GFX::RenderPass s_meshRenderPass;
 
 static PipelineObject* s_meshPipelineObject = nullptr;
@@ -261,6 +266,9 @@ static void framebufferResizeCallback(GLFWwindow* window, int width, int height)
 	gatherUniformDesc.AddInputAttachmentAttribute(0, s_meshRenderPass, 1);
 	gatherUniformDesc.AddInputAttachmentAttribute(1, s_meshRenderPass, 2);
 	gatherUniformDesc.AddInputAttachmentAttribute(2, s_meshRenderPass, 3);
+	gatherUniformDesc.AddBufferAttribute(3, s_gatheringPassUniformBuffer, 0, sizeof(GatheringPassUniformData));
+	gatherUniformDesc.AddImageAttribute(4, skybox->image, skybox->sampler);
+
 	gatherUniformDesc.SetUniformLayout(s_gatherUniformLayout);
 	gatherUniformDesc.SetStorageMode(GFX::UniformStorageMode::Dynamic);
 	s_gatherUniform = GFX::CreateUniform(gatherUniformDesc);
@@ -341,41 +349,59 @@ glm::mat4 GetViewMatrix()
 	return glm::lookAt(target + glm::vec3(cameraX, cameraY, cameraZ), target, up);
 }
 
-void CreateModelUniformBlock(const char* texPath)
+ModelUniformBlock* CreateModelUniformBlock(const char* albedoTexPath, const char* roughnessTexPath)
 {
-	s_modelUniform = new ModelUniformBlock();
+	auto result = new ModelUniformBlock();
 
 	GFX::UniformLayoutDescription uniformLayoutDesc = {};
 	// UBO
 	uniformLayoutDesc.AddUniformBinding(0, GFX::UniformType::UniformBuffer, GFX::ShaderStage::Vertex, 1);
 	// Texture
 	uniformLayoutDesc.AddUniformBinding(1, GFX::UniformType::SampledImage, GFX::ShaderStage::Fragment, 1);
+	uniformLayoutDesc.AddUniformBinding(2, GFX::UniformType::SampledImage, GFX::ShaderStage::Fragment, 1);
 
-	s_modelUniform->uniformLayout = GFX::CreateUniformLayout(uniformLayoutDesc);
+	result->uniformLayout = GFX::CreateUniformLayout(uniformLayoutDesc);
 
 	GFX::BufferDescription bufferDesc = {};
 	bufferDesc.size = sizeof(UniformBufferObject);
 	bufferDesc.storageMode = GFX::BufferStorageMode::Dynamic;
 	bufferDesc.usage = GFX::BufferUsage::UniformBuffer;
-	s_modelUniform->buffer = GFX::CreateBuffer(bufferDesc);
+	result->buffer = GFX::CreateBuffer(bufferDesc);
 
 	int texWidth, texHeight, texChannels;
-	stbi_uc* pixels = stbi_load(texPath, &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+	stbi_uc* albedoPixels = stbi_load(albedoTexPath, &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
 
-	GFX::ImageDescription imageDescription = {};
-	imageDescription.format = GFX::Format::R8G8B8A8;
-	imageDescription.width = texWidth;
-	imageDescription.height = texHeight;
-	imageDescription.depth = 1;
-	imageDescription.readOrWriteByCPU = false;
-	imageDescription.usage = GFX::ImageUsage::SampledImage;
-	imageDescription.type = GFX::ImageType::Image2D;
-	imageDescription.sampleCount = GFX::ImageSampleCount::Sample1;
+	GFX::ImageDescription albedoImageDescription = {};
+	albedoImageDescription.format = GFX::Format::R8G8B8A8;
+	albedoImageDescription.width = texWidth;
+	albedoImageDescription.height = texHeight;
+	albedoImageDescription.depth = 1;
+	albedoImageDescription.readOrWriteByCPU = false;
+	albedoImageDescription.usage = GFX::ImageUsage::SampledImage;
+	albedoImageDescription.type = GFX::ImageType::Image2D;
+	albedoImageDescription.sampleCount = GFX::ImageSampleCount::Sample1;
 
-	s_modelUniform->image = GFX::CreateImage(imageDescription);
-	GFX::UpdateImageMemory(s_modelUniform->image, pixels, sizeof(stbi_uc) * texWidth * texHeight * 4);
+	result->albedoImage = GFX::CreateImage(albedoImageDescription);
+	GFX::UpdateImageMemory(result->albedoImage, albedoPixels, sizeof(stbi_uc) * texWidth * texHeight * 4);
 
-	STBI_FREE(pixels);
+	STBI_FREE(albedoPixels);
+
+	stbi_uc* roughnessPixels = stbi_load(roughnessTexPath, &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+
+	GFX::ImageDescription roughnessImageDescription = {};
+	roughnessImageDescription.format = GFX::Format::R8G8B8A8;
+	roughnessImageDescription.width = texWidth;
+	roughnessImageDescription.height = texHeight;
+	roughnessImageDescription.depth = 1;
+	roughnessImageDescription.readOrWriteByCPU = false;
+	roughnessImageDescription.usage = GFX::ImageUsage::SampledImage;
+	roughnessImageDescription.type = GFX::ImageType::Image2D;
+	roughnessImageDescription.sampleCount = GFX::ImageSampleCount::Sample1;
+
+	result->roughnessImage = GFX::CreateImage(roughnessImageDescription);
+	GFX::UpdateImageMemory(result->roughnessImage, roughnessPixels, sizeof(stbi_uc) * texWidth * texHeight * 4);
+
+	STBI_FREE(roughnessPixels);
 
 	// s_modelUniform->image = GFX::CreateImageFromKtxTexture(texPath);
 
@@ -384,18 +410,21 @@ void CreateModelUniformBlock(const char* texPath)
 	samplerDesc.minFilter = GFX::FilterMode::Linear;
 	samplerDesc.magFilter = GFX::FilterMode::Linear;
 	samplerDesc.mipmapFilter = GFX::FilterMode::Linear;
-	samplerDesc.wrapU = GFX::WrapMode::Repeat;
-	samplerDesc.wrapV = GFX::WrapMode::Repeat;
+	samplerDesc.wrapU = GFX::WrapMode::ClampToEdge;
+	samplerDesc.wrapV = GFX::WrapMode::ClampToEdge;
 	
-	s_modelUniform->sampler = GFX::CreateSampler(samplerDesc);
+	result->sampler = GFX::CreateSampler(samplerDesc);
 
 	GFX::UniformDescription uniformDesc = {};
 	uniformDesc.SetStorageMode(GFX::UniformStorageMode::Static);
-	uniformDesc.SetUniformLayout(s_modelUniform->uniformLayout);
-	uniformDesc.AddBufferAttribute(0, s_modelUniform->buffer, 0, sizeof(UniformBufferObject));
-	uniformDesc.AddImageAttribute(1, s_modelUniform->image, s_modelUniform->sampler);
+	uniformDesc.SetUniformLayout(result->uniformLayout);
+	uniformDesc.AddBufferAttribute(0, result->buffer, 0, sizeof(UniformBufferObject));
+	uniformDesc.AddImageAttribute(1, result->albedoImage, result->sampler);
+	uniformDesc.AddImageAttribute(2, result->roughnessImage, result->sampler);
 	
-	s_modelUniform->uniform = GFX::CreateUniform(uniformDesc);
+	result->uniform = GFX::CreateUniform(uniformDesc);
+	
+	return result;
 }
 
 GFX::RenderPass CreateScreenSpaceReflectionRenderPass()
@@ -579,11 +608,21 @@ void CreateMeshMRTPipeline()
 
 void CreateGatheringPipeline()
 {
+	// Uniform Buffer
+	GFX::BufferDescription gatherUniformBufferDesc = {};
+	gatherUniformBufferDesc.size = GFX::UniformAlign(sizeof(GatheringPassUniformData));
+	gatherUniformBufferDesc.storageMode = GFX::BufferStorageMode::Dynamic;
+	gatherUniformBufferDesc.usage = GFX::BufferUsage::UniformBuffer;
+
+	s_gatheringPassUniformBuffer = GFX::CreateBuffer(gatherUniformBufferDesc);
+
 	// Uniform Layout
 	GFX::UniformLayoutDescription uniformLayoutDescription = {};
 	uniformLayoutDescription.AddUniformBinding(0, GFX::UniformType::InputAttachment, GFX::ShaderStage::Fragment, 1);
 	uniformLayoutDescription.AddUniformBinding(1, GFX::UniformType::InputAttachment, GFX::ShaderStage::Fragment, 1);
 	uniformLayoutDescription.AddUniformBinding(2, GFX::UniformType::InputAttachment, GFX::ShaderStage::Fragment, 1);
+	uniformLayoutDescription.AddUniformBinding(3, GFX::UniformType::UniformBuffer, GFX::ShaderStage::Fragment, 1);
+	uniformLayoutDescription.AddUniformBinding(4, GFX::UniformType::SampledImage, GFX::ShaderStage::Fragment, 1);
 
     s_gatherUniformLayout =	GFX::CreateUniformLayout(uniformLayoutDescription);
 
@@ -592,6 +631,8 @@ void CreateGatheringPipeline()
 	uniformDesc.AddInputAttachmentAttribute(0, s_meshRenderPass, 1);
 	uniformDesc.AddInputAttachmentAttribute(1, s_meshRenderPass, 2);
 	uniformDesc.AddInputAttachmentAttribute(2, s_meshRenderPass, 3);
+	uniformDesc.AddBufferAttribute(3, s_gatheringPassUniformBuffer, 0, GFX::UniformAlign(sizeof(GatheringPassUniformData)));
+	uniformDesc.AddImageAttribute(4, skybox->image, skybox->sampler);
 
 	uniformDesc.SetUniformLayout(s_gatherUniformLayout);
 	uniformDesc.SetStorageMode(GFX::UniformStorageMode::Dynamic);
@@ -675,7 +716,8 @@ void ScreenSpaceReflectionExample::Init()
 	target = 0.5f * (minP + maxP);
 	radius = 1.5f * Math::Max(Math::Max(maxP.x - minP.x, maxP.y - minP.y), maxP.z - minP.z);
 	
-	CreateModelUniformBlock("screen-space-reflection/texture.jpg");
+	s_modelUniform = CreateModelUniformBlock("screen-space-reflection/texture.jpg", "screen-space-reflection/white.jpg");
+	s_waterUniform = CreateModelUniformBlock("screen-space-reflection/white.jpg", "screen-space-reflection/black.tga");
 
 	s_meshRenderPass = CreateScreenSpaceReflectionRenderPass();
 
@@ -693,12 +735,12 @@ void ScreenSpaceReflectionExample::Init()
 	linearSamplerDesc.wrapV = GFX::WrapMode::ClampToEdge;
 	s_linearSampler = GFX::CreateSampler(nearestSamplerDesc);
 	
+	skybox = Skybox::Create();
+
 	// CreateMeshPipeline();
 	CreateMeshMRTPipeline();
 	CreateGatheringPipeline();
 	CreatePresentPipeline();
-
-	skybox = Skybox::Create();
 }
 
 void ScreenSpaceReflectionExample::MainLoop()
@@ -723,12 +765,36 @@ void ScreenSpaceReflectionExample::MainLoop()
 			ubo.proj = glm::perspective(glm::radians(45.0f), (float)s_width / (float)s_height, 0.1f, 1000.0f);
 			ubo.proj[1][1] *= -1;
 
+			GatheringPassUniformData gatherPassUBO = {};
+			gatherPassUBO.view = GetViewMatrix();
+			gatherPassUBO.proj = glm::perspective(glm::radians(45.0f), (float)s_width / (float)s_height, 0.1f, 1000.0f);
+			gatherPassUBO.proj[1][1] *= -1;
+			gatherPassUBO.lightDir = glm::vec4(0.0f, 1.0f, 0.0f, 0.0f);
+			gatherPassUBO.lightColor = glm::vec4(0.7f, 0.4f, 0.5f, 1.0f);
+
 			GFX::UpdateUniformBuffer(s_modelUniform->uniform, 0, &ubo);
+			GFX::UpdateUniformBuffer(s_waterUniform->uniform, 0, &ubo);
+			GFX::UpdateUniformBuffer(s_gatherUniform, 3, &gatherPassUBO);
 
 			GFX::ApplyPipeline(s_meshMRTPipelineObject->pipeline);
+
+
+			GFX::BindUniform(s_waterUniform->uniform, 0);
+			auto water = s_scene->meshes[1];
+			GFX::BindIndexBuffer(water->indexBuffer, 0, GFX::IndexType::UInt32);
+			GFX::BindVertexBuffer(water->vertexBuffer, 0);
+			GFX::DrawIndexed(water->indices.size(), 1, 0);
+				
+
 			GFX::BindUniform(s_modelUniform->uniform, 0);
-			for (auto mesh : s_scene->meshes)
+			for (int i = 0; i < s_scene->meshes.size(); i++)
 			{
+				if (i == 1)
+				{
+					continue;
+				}
+
+				auto mesh = s_scene->meshes[i];
 				GFX::BindIndexBuffer(mesh->indexBuffer, 0, GFX::IndexType::UInt32);
 				GFX::BindVertexBuffer(mesh->vertexBuffer, 0);
 				GFX::DrawIndexed(mesh->indices.size(), 1, 0);
@@ -762,7 +828,9 @@ void ScreenSpaceReflectionExample::CleanUp()
 	delete skybox;
 	DestroyScene(s_scene);
 	delete s_modelUniform;
+	delete s_waterUniform;
 
+	GFX::DestroyBuffer(s_gatheringPassUniformBuffer);
 	GFX::DestroyRenderPass(s_meshRenderPass);
 	
 	PipelineObject::Destroy(s_meshMRTPipelineObject);

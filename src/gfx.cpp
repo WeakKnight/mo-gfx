@@ -8,10 +8,11 @@
 
 #include <GLFW/glfw3.h>
 
-#define NV_EXTENSIONS
 #include <shaderc/shaderc.hpp>
 
 #include <map>
+#include <sstream>
+#include <fstream>
 #include <assert.h>
 #include <stdio.h>
 
@@ -667,6 +668,42 @@ namespace GFX
             return shaderStageCreateInfo;
         }
 
+        class ShaderIncludeCallback : public shaderc::CompileOptions::IncluderInterface
+        {
+        public:
+            // Handles shaderc_include_resolver_fn callbacks.
+            shaderc_include_result* GetInclude(const char* requested_source,
+                shaderc_include_type type,
+                const char* requesting_source,
+                size_t include_depth)
+            {
+                std::string content = ReadFile(requested_source);
+                shaderc_include_result result;
+                result.content = content.c_str();
+                result.content_length = strlen(content.c_str());
+                result.source_name = requesting_source;
+                result.source_name_length = strlen(requesting_source);
+                responses_.push_back(result);
+                return &responses_.back();
+            }
+
+            // Handles shaderc_include_result_release_fn callbacks.
+            void ReleaseInclude(shaderc_include_result* data)
+            {
+                int b = 2;
+            }
+
+            static inline std::string ReadFile(const std::string& filepath) {
+                std::ifstream ifs(filepath.c_str());
+                std::string content((std::istreambuf_iterator<char>(ifs)),
+                    (std::istreambuf_iterator<char>()));
+                ifs.close();
+                return content;
+            }
+
+            std::vector<shaderc_include_result> responses_;
+        };
+
         std::vector<uint32_t> CompileFile(const std::string& sourceName,
             shaderc_shader_kind kind,
             const std::string& source,
@@ -674,6 +711,8 @@ namespace GFX
         {
             shaderc::Compiler compiler;
             shaderc::CompileOptions options;
+
+            // options.SetIncluder(std::unique_ptr<ShaderIncludeCallback>(new ShaderIncludeCallback));
 
             // Like -DMY_DEFINE=1
             options.AddMacroDefinition("MY_DEFINE", "1");
