@@ -15,17 +15,21 @@ layout(binding = 3) uniform UniformBufferObject
 } ubo;
 
 layout(binding = 4) uniform samplerCube skybox;
+layout(binding = 5) uniform samplerCube irradianceMap;
 
 layout (location = 0) out vec4 outColor;
 
 void main()
 {    
     vec4 normalRoughness = subpassLoad(samplerNormalRoughness);
-    vec3 N = normalRoughness.xyz * 2.0 - vec3(1.0);
+    vec3 N = normalize(normalRoughness.xyz * 2.0 - vec3(1.0));
     vec3 L = mat3(ubo.view) * ubo.lightDir.xyz;
+    mat4 viewInv = inverse(ubo.view);
+
+    vec3 NWorld = normalize(mat3(viewInv) * N);
+    vec3 radiance = texture(irradianceMap, NWorld).rgb;
 
     float NDotL = clamp(dot(N,L), 0.0, 1.0);
-
 
     float roughness = normalRoughness.w;
 
@@ -34,5 +38,5 @@ void main()
         discard;
     }
 
-    outColor = vec4(NDotL * ubo.lightColor.rgb * subpassLoad(samplerAlbedo).rgb, 1.0);
+    outColor = vec4((NDotL * ubo.lightColor.rgb + radiance) * subpassLoad(samplerAlbedo).rgb, 1.0);
 }

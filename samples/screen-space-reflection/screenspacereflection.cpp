@@ -85,6 +85,7 @@ static GFX::Sampler s_nearestSampler;
 static GFX::Sampler s_linearSampler;
 
 static GFX::Buffer s_gatheringPassUniformBuffer;
+static GFX::Image s_irradianceMap;
 
 class Skybox
 {
@@ -104,20 +105,19 @@ public:
 	GFX::Shader fragShader;
 	GFX::Pipeline pipeline;
 
-	static Skybox* Create()
+	static GFX::Image LoadCubeMap(std::vector<std::string>& textureNames)
 	{
-		Skybox* result = new Skybox();
-
+		GFX::Image result = {};
 		// Load And Create Cube Map
 		int texWidth, texHeight, texChannels;
 
 		stbi_uc* pixels[6];
-		pixels[0] = stbi_load("screen-space-reflection/skybox/Front+Z.png", &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
-		pixels[1] = stbi_load("screen-space-reflection/skybox/Back-Z.png", &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
-		pixels[2] = stbi_load("screen-space-reflection/skybox/Up+Y.png", &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
-		pixels[3] = stbi_load("screen-space-reflection/skybox/Down-Y.png", &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
-		pixels[5] = stbi_load("screen-space-reflection/skybox/Left+X.png", &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
-		pixels[4] = stbi_load("screen-space-reflection/skybox/Right-X.png", &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+		pixels[0] = stbi_load(textureNames[0].c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+		pixels[1] = stbi_load(textureNames[1].c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+		pixels[2] = stbi_load(textureNames[2].c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+		pixels[3] = stbi_load(textureNames[3].c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+		pixels[5] = stbi_load(textureNames[4].c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+		pixels[4] = stbi_load(textureNames[5].c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
 
 		GFX::ImageDescription imageDescription = {};
 		imageDescription.format = GFX::Format::R8G8B8A8;
@@ -129,7 +129,7 @@ public:
 		imageDescription.type = GFX::ImageType::Cube;
 		imageDescription.sampleCount = GFX::ImageSampleCount::Sample1;
 
-		result->image = GFX::CreateImage(imageDescription);
+		result = GFX::CreateImage(imageDescription);
 
 		GFX::BufferDescription stagingBufferDesc = {};
 		stagingBufferDesc.size = sizeof(stbi_uc) * texWidth * texHeight * 4 * 6;
@@ -143,7 +143,7 @@ public:
 			GFX::UpdateBuffer(stagingBuffer, i * (sizeof(stbi_uc) * texWidth * texHeight * 4), sizeof(stbi_uc) * texWidth * texHeight * 4, pixels[i]);
 		}
 
-		GFX::CopyBufferToImage(result->image, stagingBuffer);
+		GFX::CopyBufferToImage(result, stagingBuffer);
 		GFX::DestroyBuffer(stagingBuffer);
 
 		STBI_FREE(pixels[0]);
@@ -152,6 +152,24 @@ public:
 		STBI_FREE(pixels[3]);
 		STBI_FREE(pixels[4]);
 		STBI_FREE(pixels[5]);
+
+		return result;
+	}
+
+	static Skybox* Create()
+	{
+		Skybox* result = new Skybox();
+
+		std::vector<std::string> textureNames;
+		textureNames.reserve(6);
+		textureNames.push_back("screen-space-reflection/skybox/Front+Z.png");
+		textureNames.push_back("screen-space-reflection/skybox/Back-Z.png");
+		textureNames.push_back("screen-space-reflection/skybox/Up+Y.png");
+		textureNames.push_back("screen-space-reflection/skybox/Down-Y.png");
+		textureNames.push_back("screen-space-reflection/skybox/Left+X.png");
+		textureNames.push_back("screen-space-reflection/skybox/Right-X.png");
+
+		result->image = LoadCubeMap(textureNames);
 
 		GFX::SamplerDescription samplerDesc = {};
 		samplerDesc.maxLod = 10.0f;
@@ -268,6 +286,7 @@ static void framebufferResizeCallback(GLFWwindow* window, int width, int height)
 	gatherUniformDesc.AddInputAttachmentAttribute(2, s_meshRenderPass, 3);
 	gatherUniformDesc.AddBufferAttribute(3, s_gatheringPassUniformBuffer, 0, sizeof(GatheringPassUniformData));
 	gatherUniformDesc.AddImageAttribute(4, skybox->image, skybox->sampler);
+	gatherUniformDesc.AddImageAttribute(5, s_irradianceMap, skybox->sampler);
 
 	gatherUniformDesc.SetUniformLayout(s_gatherUniformLayout);
 	gatherUniformDesc.SetStorageMode(GFX::UniformStorageMode::Dynamic);
@@ -623,6 +642,7 @@ void CreateGatheringPipeline()
 	uniformLayoutDescription.AddUniformBinding(2, GFX::UniformType::InputAttachment, GFX::ShaderStage::Fragment, 1);
 	uniformLayoutDescription.AddUniformBinding(3, GFX::UniformType::UniformBuffer, GFX::ShaderStage::Fragment, 1);
 	uniformLayoutDescription.AddUniformBinding(4, GFX::UniformType::SampledImage, GFX::ShaderStage::Fragment, 1);
+	uniformLayoutDescription.AddUniformBinding(5, GFX::UniformType::SampledImage, GFX::ShaderStage::Fragment, 1);
 
     s_gatherUniformLayout =	GFX::CreateUniformLayout(uniformLayoutDescription);
 
@@ -633,6 +653,7 @@ void CreateGatheringPipeline()
 	uniformDesc.AddInputAttachmentAttribute(2, s_meshRenderPass, 3);
 	uniformDesc.AddBufferAttribute(3, s_gatheringPassUniformBuffer, 0, GFX::UniformAlign(sizeof(GatheringPassUniformData)));
 	uniformDesc.AddImageAttribute(4, skybox->image, skybox->sampler);
+	uniformDesc.AddImageAttribute(5, s_irradianceMap, skybox->sampler);
 
 	uniformDesc.SetUniformLayout(s_gatherUniformLayout);
 	uniformDesc.SetStorageMode(GFX::UniformStorageMode::Dynamic);
@@ -737,6 +758,18 @@ void ScreenSpaceReflectionExample::Init()
 	
 	skybox = Skybox::Create();
 
+	std::vector<std::string> textureNames;
+	textureNames.reserve(6);
+
+	textureNames.push_back("screen-space-reflection/skybox/radiance_posz.tga");
+	textureNames.push_back("screen-space-reflection/skybox/radiance_negz.tga");
+	textureNames.push_back("screen-space-reflection/skybox/radiance_posy.tga");
+	textureNames.push_back("screen-space-reflection/skybox/radiance_negy.tga");
+	textureNames.push_back("screen-space-reflection/skybox/radiance_posx.tga");
+	textureNames.push_back("screen-space-reflection/skybox/radiance_negx.tga");
+
+	s_irradianceMap = Skybox::LoadCubeMap(textureNames);
+
 	// CreateMeshPipeline();
 	CreateMeshMRTPipeline();
 	CreateGatheringPipeline();
@@ -769,7 +802,7 @@ void ScreenSpaceReflectionExample::MainLoop()
 			gatherPassUBO.view = GetViewMatrix();
 			gatherPassUBO.proj = glm::perspective(glm::radians(45.0f), (float)s_width / (float)s_height, 0.1f, 1000.0f);
 			gatherPassUBO.proj[1][1] *= -1;
-			gatherPassUBO.lightDir = glm::vec4(0.0f, 1.0f, 0.0f, 0.0f);
+			gatherPassUBO.lightDir = glm::vec4(0.0f, -1.0f, 0.0f, 0.0f);
 			gatherPassUBO.lightColor = glm::vec4(0.7f, 0.4f, 0.5f, 1.0f);
 
 			GFX::UpdateUniformBuffer(s_modelUniform->uniform, 0, &ubo);
@@ -829,6 +862,8 @@ void ScreenSpaceReflectionExample::CleanUp()
 	DestroyScene(s_scene);
 	delete s_modelUniform;
 	delete s_waterUniform;
+
+	GFX::DestroyImage(s_irradianceMap);
 
 	GFX::DestroyBuffer(s_gatheringPassUniformBuffer);
 	GFX::DestroyRenderPass(s_meshRenderPass);
