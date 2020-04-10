@@ -17,6 +17,6 @@ void main()
     albedoTarget = vec4(texture(albedoSampler, fragTexCoord).rgb, 1.0);
     
     // Map to [0, 1]
-    vec3 mappedN = N / 2.0 + 0.5;
+    vec3 mappedN = N / 2.0 + vec3(0.5);
     normalRoughnessTarget = vec4(mappedN, texture(roughnessSampler, fragTexCoord).r);
 }

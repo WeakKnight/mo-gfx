@@ -22,6 +22,9 @@
 #include "material.h"
 #include "mesh.h"
 
+#include "shadowmap.h"
+#include "camera.h"
+
 class ModelUniformBlock
 {
 public:
@@ -86,6 +89,10 @@ static GFX::Sampler s_linearSampler;
 
 static GFX::Buffer s_gatheringPassUniformBuffer;
 static GFX::Image s_irradianceMap;
+
+static ShadowMap* s_shadowMap;
+
+static Camera* s_camera = nullptr;
 
 #define ALBEDO_ATTACHMENT_INDEX 1
 #define NORMAL_ATTACHMENT_INDEX 2
@@ -278,6 +285,7 @@ static Skybox* skybox = nullptr;
 // timing
 float deltaTime = 0.0f;	// time between current frame and last frame
 float lastFrame = 0.0f;
+static glm::vec3 target;
 
 static void framebufferResizeCallback(GLFWwindow* window, int width, int height)
 {
@@ -287,6 +295,7 @@ static void framebufferResizeCallback(GLFWwindow* window, int width, int height)
 	// spdlog::info("Window Resize");
 	GFX::Resize(width, height);
 	GFX::ResizeRenderPass(s_meshRenderPass, width, height);
+	s_shadowMap->Resize(width, height);
 
 	// Recreate Attachment Relavant Uniform
 	
@@ -311,16 +320,10 @@ static void framebufferResizeCallback(GLFWwindow* window, int width, int height)
 	s_presentUniform = GFX::CreateUniform(presentUniformDesc);
 }
 
-static bool firstMouseCapture = false;
-static float lastX = 0.0f;
-static float lastY = 0.0f;
-static glm::vec2 mouseOffset;
-static glm::vec3 target = glm::vec3(0.0f, 0.0f, 0.0f);
-static float theta;
-static float beta;
-static float radius = 10.0f;
+float lastX = s_width / 2.0f;
+float lastY = s_height / 2.0f;
+bool firstMouse = true;
 
-constexpr float THETA_SPEED = 1.5f;
 constexpr float PI = 3.1415927f;
 
 float clamp(float input, float left, float right)
@@ -339,44 +342,26 @@ float clamp(float input, float left, float right)
 
 void MouseCallback(GLFWwindow* window, double xpos, double ypos)
 {
-	if (firstMouseCapture)
+	if (firstMouse)
 	{
 		lastX = xpos;
 		lastY = ypos;
-		firstMouseCapture = false;
+		firstMouse = false;
 	}
 
 	float xoffset = xpos - lastX;
 	float yoffset = lastY - ypos;
 
-	mouseOffset = glm::vec2(xoffset, yoffset);
-
 	lastX = xpos;
 	lastY = ypos;
 
-	if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS)
+	if (s_camera != nullptr)
 	{
-		theta = clamp(theta + -1.0f * mouseOffset.x * deltaTime * THETA_SPEED, 0.0f, 2.0f * PI);
-		beta = clamp(beta + -1.0f * mouseOffset.y * deltaTime * THETA_SPEED, -0.5f * PI, 0.5f * PI);
+		if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS)
+		{
+			s_camera->ProcessMouseMovement(xoffset, yoffset);
+		}
 	}
-
-	if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS)
-	{
-		radius = clamp(radius + mouseOffset.y * deltaTime * 100.0f, 5.0f, 999999.0f);
-	}
-}
-
-glm::mat4 GetViewMatrix()
-{
-	float cameraY = sin(beta) * radius;
-	float horizontalRadius = cos(beta) * radius;
-
-	float cameraX = sin(theta) * horizontalRadius;
-	float cameraZ = cos(theta) * horizontalRadius;
-
-	auto up = glm::normalize(glm::cross(glm::cross(glm::vec3(cameraX, 0.0f, cameraZ), glm::vec3(0.0f, 1.0f, 0.0f)), glm::vec3(cameraX, cameraY, cameraZ)));
-
-	return glm::lookAt(target + glm::vec3(cameraX, cameraY, cameraZ), target, up);
 }
 
 ModelUniformBlock* CreateModelUniformBlock(const char* albedoTexPath, const char* roughnessTexPath)
@@ -760,7 +745,6 @@ void ScreenSpaceReflectionExample::Init()
 	s_scene = LoadScene("screen-space-reflection/TEST7WithRiver.fbx", minP, maxP);
 
 	target = 0.5f * (minP + maxP);
-	radius = 1.5f * Math::Max(Math::Max(maxP.x - minP.x, maxP.y - minP.y), maxP.z - minP.z);
 	
 	s_modelUniform = CreateModelUniformBlock("screen-space-reflection/texture.jpg", "screen-space-reflection/white.jpg");
 	s_waterUniform = CreateModelUniformBlock("screen-space-reflection/white.jpg", "screen-space-reflection/black.tga");
@@ -799,6 +783,9 @@ void ScreenSpaceReflectionExample::Init()
 	CreateMeshMRTPipeline();
 	CreateGatheringPipeline();
 	CreatePresentPipeline();
+
+	s_shadowMap = ShadowMap::Create(s_meshRenderPass, s_width, s_height);
+	s_camera = new Camera();
 }
 
 void ScreenSpaceReflectionExample::MainLoop()
@@ -811,6 +798,23 @@ void ScreenSpaceReflectionExample::MainLoop()
 		deltaTime = currentFrame - lastFrame;
 		lastFrame = currentFrame;
 
+		if (glfwGetKey(m_window, GLFW_KEY_W) == GLFW_PRESS)
+		{
+			s_camera->ProcessKeyboard(Camera_Movement::FORWARD, deltaTime);
+		}
+		if (glfwGetKey(m_window, GLFW_KEY_S) == GLFW_PRESS)
+		{
+			s_camera->ProcessKeyboard(Camera_Movement::BACKWARD, deltaTime);
+		}
+		if (glfwGetKey(m_window, GLFW_KEY_A) == GLFW_PRESS)
+		{
+			s_camera->ProcessKeyboard(Camera_Movement::LEFT, deltaTime);
+		}
+		if (glfwGetKey(m_window, GLFW_KEY_D) == GLFW_PRESS)
+		{
+			s_camera->ProcessKeyboard(Camera_Movement::RIGHT, deltaTime);
+		}
+
 		if (GFX::BeginFrame())
 		{
 			GFX::BeginRenderPass(s_meshRenderPass, 0, 0, s_width, s_height);
@@ -818,21 +822,23 @@ void ScreenSpaceReflectionExample::MainLoop()
 			GFX::SetViewport(0, 0, s_width, s_height);
 			GFX::SetScissor(0, 0, s_width, s_height);
 
-			// Shadow Map Rendering
+			glm::vec4 lightDir = glm::vec4(0.0f, -1.0f, 0.0f, 0.0f);
 
+			// Shadow Map Rendering
+			s_shadowMap->Render(s_scene, lightDir, target);
 
 			GFX::NextSubpass();
 
 			UniformBufferObject ubo = {};
-			ubo.view = GetViewMatrix();
+			ubo.view = s_camera->GetViewMatrix();
 			ubo.proj = glm::perspective(glm::radians(45.0f), (float)s_width / (float)s_height, 0.1f, 300.0f);
 			ubo.proj[1][1] *= -1;
 
 			GatheringPassUniformData gatherPassUBO = {};
-			gatherPassUBO.view = GetViewMatrix();
+			gatherPassUBO.view = s_camera->GetViewMatrix();
 			gatherPassUBO.proj = glm::perspective(glm::radians(45.0f), (float)s_width / (float)s_height, 0.1f, 300.0f);
 			gatherPassUBO.proj[1][1] *= -1;
-			gatherPassUBO.lightDir = glm::vec4(0.0f, 1.0f, 0.0f, 0.0f);
+			gatherPassUBO.lightDir = lightDir;
 			gatherPassUBO.lightColor = glm::vec4(0.7f, 0.4f, 0.5f, 1.0f);
 
 			GFX::UpdateUniformBuffer(s_modelUniform->uniform, 0, &ubo);
@@ -892,6 +898,9 @@ void ScreenSpaceReflectionExample::CleanUp()
 	DestroyScene(s_scene);
 	delete s_modelUniform;
 	delete s_waterUniform;
+
+	delete s_shadowMap;
+	delete s_camera;
 
 	GFX::DestroyImage(s_irradianceMap);
 

@@ -37,25 +37,31 @@ public:
 		glm::vec2 uv;
 	};
 
-	static ShadowMap* Create(GFX::RenderPass renderPass)
+	static ShadowMap* Create(GFX::RenderPass renderPass, uint32_t width, uint32_t height)
 	{
 		auto result = new ShadowMap();
 
+		result->Resize(width, height);
 		result->CreateShader();
 		result->CreatePipeline(renderPass);
 
 		return result;
 	}
 
-	void Render(Scene* scene, glm::vec3 lightDir, glm::vec3 center, float cameraNear, float cameraFar)
+	void Resize(uint32_t width, uint32_t height)
+	{
+		m_width = width;
+		m_height = height;
+	}
+
+	void Render(Scene* scene, glm::vec4 lightDir, glm::vec3 center)
 	{
 		GFX::ApplyPipeline(pipeline);
-		GFX::SetScissor(0, 0, mapSize, mapSize);
-		GFX::SetViewport(0, 0, mapSize, mapSize);
 
 		ShadowMapUniformObject ubo;
-		ubo.proj = glm::ortho(-50.0f, 50.0f, -50.0f, 50.0f, cameraNear, cameraFar);
+		ubo.proj = glm::ortho(-50.0f, 50.0f, -50.0f, 50.0f, 0.3f, 200.0f);
 		ubo.proj[1][1] *= -1;
+		ubo.view = glm::lookAt(center - glm::vec3(lightDir), center, glm::vec3(0.0f, 1.0f, 0.0f));
 
 		GFX::UpdateUniformBuffer(uniform, 0, &ubo);
 
@@ -76,7 +82,8 @@ public:
 	GFX::Shader vertShader = {};
 	GFX::Shader fragShader = {};
 
-	uint32_t mapSize = 1024;
+	uint32_t m_width = 0;
+	uint32_t m_height = 0;
 
 private:
 	void CreateShader()
