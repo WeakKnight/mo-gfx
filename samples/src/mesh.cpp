@@ -38,6 +38,9 @@ Scene* LoadScene(const char* path, glm::vec3& min, glm::vec3& max)
 			vertex.position = glm::eulerAngleY(glm::radians(-90.0f)) * glm::vec4(vertex.position, 1.0f);
 
 			vertex.normal = glm::vec3(aiMesh->mNormals[j].x, aiMesh->mNormals[j].y, aiMesh->mNormals[j].z);
+			vertex.normal = glm::mat3(glm::eulerAngleX(glm::radians(-90.0f))) * glm::vec3(vertex.normal);
+			vertex.normal = glm::mat3(glm::eulerAngleY(glm::radians(-90.0f))) * glm::vec3(vertex.normal);
+
 			vertex.uv = glm::vec2(aiMesh->mTextureCoords[0][j].x, 1.0f - aiMesh->mTextureCoords[0][j].y);
 
 			minX = Math::Min(vertex.position.x, minX);

@@ -523,6 +523,7 @@ GFX::RenderPass CreateScreenSpaceReflectionRenderPass()
 
 	// Subpass 0, Shadowmap Pass
 	GFX::SubPassDescription subpassShadowMap = {};
+	subpassShadowMap.colorAttachments.push_back(0);
 	subpassShadowMap.SetDepthStencilAttachment(SHADOWMAP_DEPTH_ATTACHMENT_INDEX);
 	subpassShadowMap.pipelineType = GFX::PipelineType::Graphics;
 
@@ -821,11 +822,13 @@ void ScreenSpaceReflectionExample::MainLoop()
 
 			GFX::SetViewport(0, 0, s_width, s_height);
 			GFX::SetScissor(0, 0, s_width, s_height);
+			
+			glm::vec4 lightDir = glm::vec4(glm::normalize(glm::vec3(100.463f, -26.725f, 0.0f)), 0.0f);
 
-			glm::vec4 lightDir = glm::vec4(0.0f, -1.0f, 0.0f, 0.0f);
+			glm::vec3 forward = glm::inverse(s_camera->GetViewMatrix()) * glm::vec4(0.0f, 0.0f, -1.0f, 1.0f);
 
 			// Shadow Map Rendering
-			s_shadowMap->Render(s_scene, lightDir, target);
+			s_shadowMap->Render(s_scene, target, s_camera);
 
 			GFX::NextSubpass();
 

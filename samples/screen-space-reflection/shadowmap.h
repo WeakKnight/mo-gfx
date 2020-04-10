@@ -10,6 +10,8 @@
 #include "string_utils.h"
 #include "mesh.h"
 
+#include "camera.h"
+
 class ShadowMap
 {
 public:
@@ -54,14 +56,30 @@ public:
 		m_height = height;
 	}
 
-	void Render(Scene* scene, glm::vec4 lightDir, glm::vec3 center)
+	void Render(Scene* scene, glm::vec3 center, Camera* camera)
 	{
 		GFX::ApplyPipeline(pipeline);
 
 		ShadowMapUniformObject ubo;
-		ubo.proj = glm::ortho(-50.0f, 50.0f, -50.0f, 50.0f, 0.3f, 200.0f);
+		ubo.proj = glm::ortho(-80.0f, 80.0f, -80.0f, 80.0f, 0.3f, 300.0f);
 		ubo.proj[1][1] *= -1;
-		ubo.view = glm::lookAt(center - glm::vec3(lightDir), center, glm::vec3(0.0f, 1.0f, 0.0f));
+		
+		glm::vec4 lightDir = glm::vec4(glm::normalize(glm::vec3(100.463f, -26.725f, 0.0f)), 0.0f);
+
+		// 
+		 // Calculate the new Front vector
+		glm::vec3 Front = glm::normalize(lightDir);
+		glm::vec3 WorldUp = glm::vec3(0.0f, 1.0f, 0.0f);
+		if (abs(glm::length(Front + WorldUp) - 0.0f) <= 0.00001f)
+		{
+			WorldUp += glm::vec3(0.0001f, 0.0f, 0.0f);
+			WorldUp = glm::normalize(WorldUp);
+		}
+		// Also re-calculate the Right and Up vector
+		glm::vec3 Right = glm::normalize(glm::cross(Front, WorldUp));  // Normalize the vectors, because their length gets closer to 0 the more you look up or down which results in slower movement.
+		glm::vec3 Up = glm::normalize(glm::cross(Right, Front));
+		ubo.view = glm::lookAt(center - 120.0f * glm::vec3(lightDir), center, Up);
+		// ubo.view = camera->GetViewMatrix();
 
 		GFX::UpdateUniformBuffer(uniform, 0, &ubo);
 
@@ -145,7 +163,7 @@ private:
 		pipelineDesc.shaders.push_back(fragShader);
 		pipelineDesc.cullFace = GFX::CullFace::Front;
 
-		for (int i = 0; i < 0; i++)
+		for (int i = 0; i < 1; i++)
 		{
 			pipelineDesc.blendStates.push_back({});
 		}
