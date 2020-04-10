@@ -39,7 +39,7 @@ void main()
 {    
     vec4 normalRoughness = subpassLoad(samplerNormalRoughness);
     vec3 N = normalize(normalRoughness.xyz * 2.0 - vec3(1.0));
-    vec3 L = mat3(ubo.view) * ubo.lightDir.xyz;
+    vec3 L = mat3(ubo.view) * -ubo.lightDir.xyz;
     mat4 viewInv = inverse(ubo.view);
 
     vec3 NWorld = normalize(mat3(viewInv) * N);
