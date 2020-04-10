@@ -87,6 +87,11 @@ static GFX::Sampler s_linearSampler;
 static GFX::Buffer s_gatheringPassUniformBuffer;
 static GFX::Image s_irradianceMap;
 
+#define ALBEDO_ATTACHMENT_INDEX 1
+#define NORMAL_ATTACHMENT_INDEX 2
+#define HDR_ATTACHMENT_INDEX 3
+#define DEPTH_ATTACHMENT_INDEX 4
+
 class Skybox
 {
 public:
@@ -281,12 +286,12 @@ static void framebufferResizeCallback(GLFWwindow* window, int width, int height)
 	
 	GFX::DestroyUniform(s_gatherUniform);
 	GFX::UniformDescription gatherUniformDesc = {};
-	gatherUniformDesc.AddInputAttachmentAttribute(0, s_meshRenderPass, 1);
-	gatherUniformDesc.AddInputAttachmentAttribute(1, s_meshRenderPass, 2);
-	gatherUniformDesc.AddInputAttachmentAttribute(2, s_meshRenderPass, 3);
-	gatherUniformDesc.AddBufferAttribute(3, s_gatheringPassUniformBuffer, 0, sizeof(GatheringPassUniformData));
-	gatherUniformDesc.AddImageAttribute(4, skybox->image, skybox->sampler);
-	gatherUniformDesc.AddImageAttribute(5, s_irradianceMap, skybox->sampler);
+	gatherUniformDesc.AddInputAttachmentAttribute(0, s_meshRenderPass, ALBEDO_ATTACHMENT_INDEX);
+	gatherUniformDesc.AddInputAttachmentAttribute(1, s_meshRenderPass, NORMAL_ATTACHMENT_INDEX);
+	gatherUniformDesc.AddBufferAttribute(2, s_gatheringPassUniformBuffer, 0, sizeof(GatheringPassUniformData));
+	gatherUniformDesc.AddImageAttribute(3, skybox->image, skybox->sampler);
+	gatherUniformDesc.AddImageAttribute(4, s_irradianceMap, skybox->sampler);
+	gatherUniformDesc.AddSampledAttachmentAttribute(5, s_meshRenderPass, DEPTH_ATTACHMENT_INDEX, s_nearestSampler);
 
 	gatherUniformDesc.SetUniformLayout(s_gatherUniformLayout);
 	gatherUniformDesc.SetStorageMode(GFX::UniformStorageMode::Dynamic);
@@ -294,7 +299,7 @@ static void framebufferResizeCallback(GLFWwindow* window, int width, int height)
 
 	GFX::DestroyUniform(s_presentUniform);
 	GFX::UniformDescription presentUniformDesc = {};
-	presentUniformDesc.AddSampledAttachmentAttribute(0, s_meshRenderPass, 4, s_nearestSampler);
+	presentUniformDesc.AddSampledAttachmentAttribute(0, s_meshRenderPass, HDR_ATTACHMENT_INDEX, s_nearestSampler);
 	presentUniformDesc.SetUniformLayout(s_presentUniformLayout);
 	presentUniformDesc.SetStorageMode(GFX::UniformStorageMode::Dynamic);
 	s_presentUniform = GFX::CreateUniform(presentUniformDesc);
@@ -487,20 +492,7 @@ GFX::RenderPass CreateScreenSpaceReflectionRenderPass()
 	normalRoughnessClearColor.SetColor(GFX::Color(0.0f, 0.0f, 0.0f, 1.0f));
 	gBufferNormalRoughnessAttachment.clearValue = normalRoughnessClearColor;
 
-	// Index 3 Position
-	GFX::AttachmentDescription gBufferPositionAttachment = {};
-	gBufferPositionAttachment.width = s_width;
-	gBufferPositionAttachment.height = s_height;
-	gBufferPositionAttachment.format = GFX::Format::R16G16B16A16F;
-	gBufferPositionAttachment.loadAction = GFX::AttachmentLoadAction::Clear;
-	gBufferPositionAttachment.storeAction = GFX::AttachmentStoreAction::Store;
-	gBufferPositionAttachment.type = GFX::AttachmentType::Color;
-
-	GFX::ClearValue positionClearColor = {};
-	positionClearColor.SetColor(GFX::Color(0.0f, 0.0f, 0.0f, 0.0f));
-	gBufferPositionAttachment.clearValue = positionClearColor;
-
-	// Index 4 Hdr Attachment
+	// Index 3 Hdr Attachment
 	GFX::AttachmentDescription hdrAttachment = {};
 	hdrAttachment.width = s_width;
 	hdrAttachment.height = s_height;
@@ -513,7 +505,7 @@ GFX::RenderPass CreateScreenSpaceReflectionRenderPass()
 	hdrClearColor.SetColor(GFX::Color(0.0f, 0.0f, 0.0f, 1.0f));
 	hdrAttachment.clearValue = hdrClearColor;
 
-	// Index 5 Depth
+	// Index 4 Depth
 	GFX::AttachmentDescription depthAttachment = {};
 	depthAttachment.width = s_width;
 	depthAttachment.height = s_height;
@@ -528,22 +520,22 @@ GFX::RenderPass CreateScreenSpaceReflectionRenderPass()
 	// Subpass 0, GBufferPass
 	GFX::SubPassDescription subpassGBuffer = {};
 	// Albedo
-	subpassGBuffer.colorAttachments.push_back(1);
+	subpassGBuffer.colorAttachments.push_back(ALBEDO_ATTACHMENT_INDEX);
 	// Normal Roughness
-	subpassGBuffer.colorAttachments.push_back(2);
-	// Position
-	subpassGBuffer.colorAttachments.push_back(3);
-	subpassGBuffer.SetDepthStencilAttachment(5);
+	subpassGBuffer.colorAttachments.push_back(NORMAL_ATTACHMENT_INDEX);
+
+	subpassGBuffer.SetDepthStencilAttachment(DEPTH_ATTACHMENT_INDEX);
 	subpassGBuffer.pipelineType = GFX::PipelineType::Graphics;
 	
 	// Subpass 1 Gathering Pass
 	GFX::SubPassDescription subpassGather = {};
 	// Render To HDR Pass
-	subpassGather.colorAttachments.push_back(4);
+	subpassGather.colorAttachments.push_back(HDR_ATTACHMENT_INDEX);
 	//// G Buffer
-	subpassGather.inputAttachments.push_back(1);
-	subpassGather.inputAttachments.push_back(2);
-	subpassGather.inputAttachments.push_back(3);
+	subpassGather.inputAttachments.push_back(ALBEDO_ATTACHMENT_INDEX);
+	subpassGather.inputAttachments.push_back(NORMAL_ATTACHMENT_INDEX);
+	subpassGather.inputAttachments.push_back(DEPTH_ATTACHMENT_INDEX);
+
 	subpassGather.pipelineType = GFX::PipelineType::Graphics;
 
 	// Subpass 2 Present
@@ -551,7 +543,7 @@ GFX::RenderPass CreateScreenSpaceReflectionRenderPass()
 	// Render To Swapchain
 	subpassPresent.colorAttachments.push_back(0);
 	//// HDR Input
-	subpassPresent.inputAttachments.push_back(4);
+	subpassPresent.inputAttachments.push_back(HDR_ATTACHMENT_INDEX);
 	subpassPresent.pipelineType = GFX::PipelineType::Graphics;
 
 	GFX::DependencyDescription dependencyDesc0 = {};
@@ -577,7 +569,6 @@ GFX::RenderPass CreateScreenSpaceReflectionRenderPass()
 	renderPassDesc.attachments.push_back(swapChainAttachment);
 	renderPassDesc.attachments.push_back(gBufferAlbedoAttachment);
 	renderPassDesc.attachments.push_back(gBufferNormalRoughnessAttachment);
-	renderPassDesc.attachments.push_back(gBufferPositionAttachment);
 	renderPassDesc.attachments.push_back(hdrAttachment);
 	renderPassDesc.attachments.push_back(depthAttachment);
 
@@ -622,7 +613,7 @@ void CreateMeshMRTPipeline()
 	uniformBindings.AddUniformLayout(s_modelUniform->uniformLayout);
 
 	s_meshMRTPipelineObject = new PipelineObject();
-	s_meshMRTPipelineObject->Build(s_meshRenderPass, 0, 3, vertexBindings, uniformBindings, "screen-space-reflection/default.vert", "screen-space-reflection/defaultMRT.frag", true);
+	s_meshMRTPipelineObject->Build(s_meshRenderPass, 0, 2, vertexBindings, uniformBindings, "screen-space-reflection/default.vert", "screen-space-reflection/defaultMRT.frag", true);
 }
 
 void CreateGatheringPipeline()
@@ -639,8 +630,8 @@ void CreateGatheringPipeline()
 	GFX::UniformLayoutDescription uniformLayoutDescription = {};
 	uniformLayoutDescription.AddUniformBinding(0, GFX::UniformType::InputAttachment, GFX::ShaderStage::Fragment, 1);
 	uniformLayoutDescription.AddUniformBinding(1, GFX::UniformType::InputAttachment, GFX::ShaderStage::Fragment, 1);
-	uniformLayoutDescription.AddUniformBinding(2, GFX::UniformType::InputAttachment, GFX::ShaderStage::Fragment, 1);
-	uniformLayoutDescription.AddUniformBinding(3, GFX::UniformType::UniformBuffer, GFX::ShaderStage::Fragment, 1);
+	uniformLayoutDescription.AddUniformBinding(2, GFX::UniformType::UniformBuffer, GFX::ShaderStage::Fragment, 1);
+	uniformLayoutDescription.AddUniformBinding(3, GFX::UniformType::SampledImage, GFX::ShaderStage::Fragment, 1);
 	uniformLayoutDescription.AddUniformBinding(4, GFX::UniformType::SampledImage, GFX::ShaderStage::Fragment, 1);
 	uniformLayoutDescription.AddUniformBinding(5, GFX::UniformType::SampledImage, GFX::ShaderStage::Fragment, 1);
 
@@ -648,13 +639,12 @@ void CreateGatheringPipeline()
 
 	// Uniform
 	GFX::UniformDescription uniformDesc = {};
-	uniformDesc.AddInputAttachmentAttribute(0, s_meshRenderPass, 1);
-	uniformDesc.AddInputAttachmentAttribute(1, s_meshRenderPass, 2);
-	uniformDesc.AddInputAttachmentAttribute(2, s_meshRenderPass, 3);
-	uniformDesc.AddBufferAttribute(3, s_gatheringPassUniformBuffer, 0, GFX::UniformAlign(sizeof(GatheringPassUniformData)));
-	uniformDesc.AddImageAttribute(4, skybox->image, skybox->sampler);
-	uniformDesc.AddImageAttribute(5, s_irradianceMap, skybox->sampler);
-
+	uniformDesc.AddInputAttachmentAttribute(0, s_meshRenderPass, ALBEDO_ATTACHMENT_INDEX);
+	uniformDesc.AddInputAttachmentAttribute(1, s_meshRenderPass, NORMAL_ATTACHMENT_INDEX);
+	uniformDesc.AddBufferAttribute(2, s_gatheringPassUniformBuffer, 0, GFX::UniformAlign(sizeof(GatheringPassUniformData)));
+	uniformDesc.AddImageAttribute(3, skybox->image, skybox->sampler);
+	uniformDesc.AddImageAttribute(4, s_irradianceMap, skybox->sampler);
+	uniformDesc.AddSampledAttachmentAttribute(5, s_meshRenderPass, DEPTH_ATTACHMENT_INDEX, s_nearestSampler);
 	uniformDesc.SetUniformLayout(s_gatherUniformLayout);
 	uniformDesc.SetStorageMode(GFX::UniformStorageMode::Dynamic);
 
@@ -682,7 +672,7 @@ void CreatePresentPipeline()
 	GFX::UniformDescription uniformDesc = {};
 	// HDR attachment 
 	// uniformDesc.AddInputAttachmentAttribute(0, s_meshRenderPass, 4);
-	uniformDesc.AddSampledAttachmentAttribute(0, s_meshRenderPass, 4, s_nearestSampler);
+	uniformDesc.AddSampledAttachmentAttribute(0, s_meshRenderPass, HDR_ATTACHMENT_INDEX, s_nearestSampler);
 	uniformDesc.SetUniformLayout(s_presentUniformLayout);
 	uniformDesc.SetStorageMode(GFX::UniformStorageMode::Dynamic);
 
@@ -795,19 +785,19 @@ void ScreenSpaceReflectionExample::MainLoop()
 
 			UniformBufferObject ubo = {};
 			ubo.view = GetViewMatrix();
-			ubo.proj = glm::perspective(glm::radians(45.0f), (float)s_width / (float)s_height, 0.1f, 1000.0f);
+			ubo.proj = glm::perspective(glm::radians(45.0f), (float)s_width / (float)s_height, 0.1f, 300.0f);
 			ubo.proj[1][1] *= -1;
 
 			GatheringPassUniformData gatherPassUBO = {};
 			gatherPassUBO.view = GetViewMatrix();
-			gatherPassUBO.proj = glm::perspective(glm::radians(45.0f), (float)s_width / (float)s_height, 0.1f, 1000.0f);
+			gatherPassUBO.proj = glm::perspective(glm::radians(45.0f), (float)s_width / (float)s_height, 0.1f, 300.0f);
 			gatherPassUBO.proj[1][1] *= -1;
 			gatherPassUBO.lightDir = glm::vec4(0.0f, -1.0f, 0.0f, 0.0f);
 			gatherPassUBO.lightColor = glm::vec4(0.7f, 0.4f, 0.5f, 1.0f);
 
 			GFX::UpdateUniformBuffer(s_modelUniform->uniform, 0, &ubo);
 			GFX::UpdateUniformBuffer(s_waterUniform->uniform, 0, &ubo);
-			GFX::UpdateUniformBuffer(s_gatherUniform, 3, &gatherPassUBO);
+			GFX::UpdateUniformBuffer(s_gatherUniform, 2, &gatherPassUBO);
 
 			GFX::ApplyPipeline(s_meshMRTPipelineObject->pipeline);
 

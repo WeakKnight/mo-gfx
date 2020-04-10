@@ -4,9 +4,8 @@ layout (location = 0) in vec2 inUV;
 
 layout (input_attachment_index = 0, binding = 0) uniform subpassInput samplerAlbedo;
 layout (input_attachment_index = 1, binding = 1) uniform subpassInput samplerNormalRoughness;
-layout (input_attachment_index = 2, binding = 2) uniform subpassInput samplerPosition; 
 
-layout(binding = 3) uniform UniformBufferObject 
+layout(binding = 2) uniform UniformBufferObject 
 {
     vec4 lightDir;
     vec4 lightColor;
@@ -14,10 +13,25 @@ layout(binding = 3) uniform UniformBufferObject
     mat4 proj;
 } ubo;
 
-layout(binding = 4) uniform samplerCube skybox;
-layout(binding = 5) uniform samplerCube irradianceMap;
+layout(binding = 3) uniform samplerCube skybox;
+layout(binding = 4) uniform samplerCube irradianceMap;
+layout(binding = 5) uniform sampler2D samplerDepth;
 
 layout (location = 0) out vec4 outColor;
+
+vec3 WorldPosFromDepth(float depth, mat4 projInv, mat4 viewInv) {
+    float z = depth;
+
+    vec4 clipSpacePosition = vec4(inUV * 2.0 - 1.0, z, 1.0);
+    vec4 viewSpacePosition = projInv * clipSpacePosition;
+
+    // Perspective division
+    viewSpacePosition /= viewSpacePosition.w;
+
+    vec4 worldSpacePosition = viewInv * viewSpacePosition;
+
+    return worldSpacePosition.xyz;
+}
 
 void main()
 {    
@@ -38,5 +52,10 @@ void main()
         discard;
     }
 
+    mat4 projInv = inverse(ubo.proj);
+    vec3 posWS = WorldPosFromDepth(texture(samplerDepth, inUV).r, projInv, viewInv);
+    vec3 posCS = vec3(ubo.view * vec4(posWS, 1.0));
+
     outColor = vec4((NDotL * ubo.lightColor.rgb + radiance) * subpassLoad(samplerAlbedo).rgb, 1.0);
+    // outColor = vec4(posCS, 1.0);
 }
