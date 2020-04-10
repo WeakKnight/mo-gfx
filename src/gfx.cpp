@@ -2935,13 +2935,13 @@ namespace GFX
     {
         for (auto format : availableFormats)
         {
-            if (format.format == vk::Format::eR8G8B8A8Srgb && format.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear)
+            if (format.format == vk::Format::eB8G8R8A8Srgb && format.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear)
             {
                 return format;
             }
         }
 
-        return availableFormats[0];
+        return availableFormats[1];
     }
 
     vk::PresentModeKHR ChoosePresentMode(const std::vector<vk::PresentModeKHR>& availablePresentModes)

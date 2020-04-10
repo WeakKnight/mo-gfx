@@ -19,6 +19,8 @@ layout(binding = 5) uniform sampler2D samplerDepth;
 
 layout (location = 0) out vec4 outColor;
 
+const float PI = 3.1415927;
+
 vec3 WorldPosFromDepth(float depth, mat4 projInv, mat4 viewInv) {
     float z = depth;
 
@@ -56,6 +58,6 @@ void main()
     vec3 posWS = WorldPosFromDepth(texture(samplerDepth, inUV).r, projInv, viewInv);
     vec3 posCS = vec3(ubo.view * vec4(posWS, 1.0));
 
-    outColor = vec4((NDotL * ubo.lightColor.rgb + radiance) * subpassLoad(samplerAlbedo).rgb, 1.0);
+    outColor = vec4((NDotL * ubo.lightColor.rgb / PI + radiance) * subpassLoad(samplerAlbedo).rgb, 1.0);
     // outColor = vec4(posCS, 1.0);
 }
