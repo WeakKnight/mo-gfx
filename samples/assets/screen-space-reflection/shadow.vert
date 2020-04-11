@@ -4,6 +4,10 @@ layout(binding = 0) uniform UniformBufferObject
 {
     mat4 view;
     mat4 proj;
+    vec4 nearFarSettings;
+    vec4 nothing;
+	vec4 nothing1;
+	vec4 nothing2;
 } ubo;
 
 layout(location = 0) in vec3 inPosition;

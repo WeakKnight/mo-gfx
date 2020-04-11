@@ -307,6 +307,7 @@ static void framebufferResizeCallback(GLFWwindow* window, int width, int height)
 	gatherUniformDesc.AddImageAttribute(3, skybox->image, skybox->sampler);
 	gatherUniformDesc.AddImageAttribute(4, s_irradianceMap, skybox->sampler);
 	gatherUniformDesc.AddSampledAttachmentAttribute(5, s_meshRenderPass, DEPTH_ATTACHMENT_INDEX, s_nearestSampler);
+	gatherUniformDesc.AddSampledAttachmentAttribute(6, s_meshRenderPass, SHADOWMAP_DEPTH_ATTACHMENT_INDEX, s_nearestSampler);
 
 	gatherUniformDesc.SetUniformLayout(s_gatherUniformLayout);
 	gatherUniformDesc.SetStorageMode(GFX::UniformStorageMode::Dynamic);
@@ -545,6 +546,7 @@ GFX::RenderPass CreateScreenSpaceReflectionRenderPass()
 	subpassGather.inputAttachments.push_back(ALBEDO_ATTACHMENT_INDEX);
 	subpassGather.inputAttachments.push_back(NORMAL_ATTACHMENT_INDEX);
 	subpassGather.inputAttachments.push_back(DEPTH_ATTACHMENT_INDEX);
+	subpassGather.inputAttachments.push_back(SHADOWMAP_DEPTH_ATTACHMENT_INDEX);
 
 	subpassGather.pipelineType = GFX::PipelineType::Graphics;
 
@@ -655,6 +657,7 @@ void CreateGatheringPipeline()
 	uniformLayoutDescription.AddUniformBinding(3, GFX::UniformType::SampledImage, GFX::ShaderStage::Fragment, 1);
 	uniformLayoutDescription.AddUniformBinding(4, GFX::UniformType::SampledImage, GFX::ShaderStage::Fragment, 1);
 	uniformLayoutDescription.AddUniformBinding(5, GFX::UniformType::SampledImage, GFX::ShaderStage::Fragment, 1);
+	uniformLayoutDescription.AddUniformBinding(6, GFX::UniformType::SampledImage, GFX::ShaderStage::Fragment, 1);
 
     s_gatherUniformLayout =	GFX::CreateUniformLayout(uniformLayoutDescription);
 
@@ -666,6 +669,7 @@ void CreateGatheringPipeline()
 	uniformDesc.AddImageAttribute(3, skybox->image, skybox->sampler);
 	uniformDesc.AddImageAttribute(4, s_irradianceMap, skybox->sampler);
 	uniformDesc.AddSampledAttachmentAttribute(5, s_meshRenderPass, DEPTH_ATTACHMENT_INDEX, s_nearestSampler);
+	uniformDesc.AddSampledAttachmentAttribute(6, s_meshRenderPass, SHADOWMAP_DEPTH_ATTACHMENT_INDEX, s_nearestSampler);
 	uniformDesc.SetUniformLayout(s_gatherUniformLayout);
 	uniformDesc.SetStorageMode(GFX::UniformStorageMode::Dynamic);
 
@@ -675,6 +679,7 @@ void CreateGatheringPipeline()
 
 	GFX::UniformBindings uniformBindings = {};
 	uniformBindings.AddUniformLayout(s_gatherUniformLayout);
+	uniformBindings.AddUniformLayout(s_shadowMap->uniformLayout);
 
 	s_gatherPipelineObject = new PipelineObject();
 	s_gatherPipelineObject->Build(s_meshRenderPass, GATHER_PASS_INDEX, 1, vertexBindings, uniformBindings, "screen-space-reflection/screen_quad.vert", "screen-space-reflection/gather_pass.frag", false, GFX::CullFace::None);
@@ -766,6 +771,8 @@ void ScreenSpaceReflectionExample::Init()
 	linearSamplerDesc.wrapV = GFX::WrapMode::ClampToEdge;
 	s_linearSampler = GFX::CreateSampler(nearestSamplerDesc);
 	
+	s_shadowMap = ShadowMap::Create(s_meshRenderPass, s_width, s_height);
+
 	skybox = Skybox::Create();
 
 	std::vector<std::string> textureNames;
@@ -785,7 +792,6 @@ void ScreenSpaceReflectionExample::Init()
 	CreateGatheringPipeline();
 	CreatePresentPipeline();
 
-	s_shadowMap = ShadowMap::Create(s_meshRenderPass, s_width, s_height);
 	s_camera = new Camera();
 }
 
@@ -828,7 +834,7 @@ void ScreenSpaceReflectionExample::MainLoop()
 			glm::vec3 forward = glm::inverse(s_camera->GetViewMatrix()) * glm::vec4(0.0f, 0.0f, -1.0f, 1.0f);
 
 			// Shadow Map Rendering
-			s_shadowMap->Render(s_scene, target, s_camera);
+			s_shadowMap->Render(s_scene, target, s_camera, (float)s_width/(float)s_height);
 
 			GFX::NextSubpass();
 
@@ -881,6 +887,7 @@ void ScreenSpaceReflectionExample::MainLoop()
 
 			GFX::ApplyPipeline(s_gatherPipelineObject->pipeline);
 			GFX::BindUniform(s_gatherUniform, 0);
+			GFX::BindUniform(s_shadowMap->uniform, 1);
 			GFX::Draw(3, 1, 0, 0);
 
 			GFX::NextSubpass();

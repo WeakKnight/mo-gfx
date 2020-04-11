@@ -16,10 +16,27 @@ layout(binding = 2) uniform UniformBufferObject
 layout(binding = 3) uniform samplerCube skybox;
 layout(binding = 4) uniform samplerCube irradianceMap;
 layout(binding = 5) uniform sampler2D samplerDepth;
+layout(binding = 6) uniform sampler2D shadowMap;
+
+layout(binding = 0, set = 1) uniform ShadowUniformBufferObject 
+{
+    mat4 view;
+    mat4 proj;
+    vec4 nearFarSettings;
+    vec4 nothing;
+	vec4 nothing1;
+	vec4 nothing2;
+} subo; 
 
 layout (location = 0) out vec4 outColor;
 
 const float PI = 3.1415927;
+
+float LinearizeDepth(float depth, float n, float f)
+{
+  float z = depth;
+  return (2.0 * n) / (f + n - z * (f - n));	
+}
 
 vec3 WorldPosFromDepth(float depth, mat4 projInv, mat4 viewInv) {
     float z = depth;
@@ -35,6 +52,40 @@ vec3 WorldPosFromDepth(float depth, mat4 projInv, mat4 viewInv) {
     return worldSpacePosition.xyz;
 }
 
+float WorldPosToDepth(vec3 worldPos, mat4 proj, mat4 view)
+{
+    vec4 projCoords = proj * view * vec4(worldPos, 1.0);
+    vec3 projectedCoords = projCoords.xyz / projCoords.w;
+    return projectedCoords.z;
+}
+
+vec2 WorldSpaceToScreenSpace(vec3 worldPos, mat4 projMatrix, mat4 viewMatrix)
+{
+    vec4 clipSpacePos = projMatrix * viewMatrix * vec4(worldPos, 1.0);
+    vec3 ndcSpacePos = clipSpacePos.xyz / clipSpacePos.w;
+    vec2 screenSpacePos = (ndcSpacePos.xy + vec2(1.0)) / 2.0;
+    return screenSpacePos.xy;
+}
+
+float ShadowedFactor(vec3 worldPos, float NDotL)
+{
+    vec2 shadowUV = WorldSpaceToScreenSpace(worldPos, subo.proj, subo.view);
+    float shadowDepth = texture(shadowMap, shadowUV).r; 
+    float fragDepth = WorldPosToDepth(worldPos, subo.proj, subo.view);
+   
+    shadowDepth = LinearizeDepth(shadowDepth, subo.nearFarSettings.x ,  subo.nearFarSettings.y);
+    fragDepth = LinearizeDepth(fragDepth, subo.nearFarSettings.x , subo.nearFarSettings.y);
+
+    if(fragDepth - 0.0001 < shadowDepth)
+    {
+        return 1.0;
+    }
+    else
+    {
+        return 0.0;
+    }
+}
+
 void main()
 {       
     vec4 normalRoughness = subpassLoad(samplerNormalRoughness);
@@ -46,7 +97,9 @@ void main()
 
     mat4 viewInv = inverse(ubo.view);
     mat4 projInv = inverse(ubo.proj);
-    vec3 posWS = WorldPosFromDepth(texture(samplerDepth, inUV).r, projInv, viewInv);
+    float currentDepth = texture(samplerDepth, inUV).r;
+
+    vec3 posWS = WorldPosFromDepth(currentDepth, projInv, viewInv);
     vec3 posCS = vec3(ubo.view * vec4(posWS, 1.0));
 
     vec3 N = normalize(normalRoughness.xyz * 2.0 - vec3(1.0));
@@ -61,21 +114,31 @@ void main()
     float HDotN = clamp(dot(H, N), 0.0, 1.0);
 
     vec3 NWorld = normalize(mat3(viewInv) * N);
-    vec3 radiance = texture(irradianceMap, NWorld).rgb;
+    vec3 radiance = texture(irradianceMap, vec3(-1.0, 1.0, 1.0) * NWorld).rgb;
     float roughness = normalRoughness.w;
 
     vec3 specular = vec3(0.0, 0.0, 0.0);
-    // vec3 specular = 12.0 * ubo.lightColor.rgb * vec3(1.0) * pow(HDotN, 10.0); 
-    vec3 albedo = (NDotL * ubo.lightColor.rgb / PI + radiance) * subpassLoad(samplerAlbedo).rgb;
-
+    vec3 albedo = (NDotL * 10005.0 * ubo.lightColor.rgb) * subpassLoad(samplerAlbedo).rgb;
+    vec3 ambient = radiance * subpassLoad(samplerAlbedo).rgb;
+    
     if(roughness < 0.5)
     {
-        specular = texture(skybox, mat3(viewInv) * RealR).rgb;
+        specular = texture(skybox, vec3(-1.0, 1.0, 1.0) * normalize(mat3(viewInv) * RealR)).rgb;
         albedo = vec3(0.0, 0.0, 0.0);
     }
-    
-    outColor = vec4(albedo + specular, 1.0);
-    // outColor = vec4(specular, 1.0);
 
-    // outColor = vec4(posCS, 1.0);
+    float shadowFactor = ShadowedFactor(posWS, NDotL);
+
+    // outColor = vec4(shadowFactor * albedo + ambient + specular, 1.0);
+    if(posCS.z > -30.0)
+    {
+        outColor = vec4(1.0, 0.0, 0.0,1.0);
+    }
+    else
+    {
+        outColor = vec4(shadowFactor * albedo + 0.1 * ambient + specular, 1.0);
+    }
+    // outColor = vec4( texture(shadowMap, inUV).rrr, 1.0);
+    // outColor = vec4(inUV, 0.0, 1.0);
+    // outColor = vec4(WorldSpaceToScreenSpace(posWS, subo.proj, subo.view), 0.0, 1.0);
 }

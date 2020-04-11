@@ -285,7 +285,8 @@ namespace GFX
         RayGen,
         Intersection,
         AnyHit,
-        None
+        None,
+        VertexFragment
     };
 
     struct ShaderDescription

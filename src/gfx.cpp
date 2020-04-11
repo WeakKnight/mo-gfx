@@ -192,7 +192,8 @@ namespace GFX
 
     vk::Format MapTypeFormatForVulkan(ValueType valueType);
     vk::IndexType MapIndexTypeFormatForVulkan(IndexType indexType);
-    vk::ShaderStageFlagBits MapShaderStageForVulkan(const ShaderStage& stage);
+    vk::ShaderStageFlags MapShaderStageForVulkan(const ShaderStage& stage);
+    vk::ShaderStageFlagBits MapSingleShaderStageForVulkan(const ShaderStage& stage);
     vk::DescriptorType MapUniformTypeForVulkan(const UniformType& uniformType);
     vk::Filter MapFilterForVulkan(const FilterMode& filterMode);
     vk::SamplerMipmapMode MapMipmapFilterForVulkan(const FilterMode& filterMode);
@@ -661,7 +662,7 @@ namespace GFX
         vk::PipelineShaderStageCreateInfo GetShaderStageCreateInfo()
         {
             vk::PipelineShaderStageCreateInfo shaderStageCreateInfo = {};
-            shaderStageCreateInfo.setStage(MapShaderStageForVulkan(m_shaderStage));
+            shaderStageCreateInfo.setStage(MapSingleShaderStageForVulkan(m_shaderStage));
             shaderStageCreateInfo.setModule(m_shaderModule);
             shaderStageCreateInfo.setPName("main");
 
@@ -2518,7 +2519,34 @@ namespace GFX
         }
     }
 
-    vk::ShaderStageFlagBits MapShaderStageForVulkan(const ShaderStage& stage)
+    vk::ShaderStageFlags MapShaderStageForVulkan(const ShaderStage& stage)
+    {
+        switch (stage)
+        {
+        case ShaderStage::Vertex:
+            return vk::ShaderStageFlagBits::eVertex;
+        case ShaderStage::Compute:
+            return vk::ShaderStageFlagBits::eCompute;
+        case ShaderStage::Fragment:
+            return vk::ShaderStageFlagBits::eFragment;
+        case ShaderStage::AnyHit:
+            return vk::ShaderStageFlagBits::eAnyHitKHR;
+        case ShaderStage::ClosetHit:
+            return vk::ShaderStageFlagBits::eClosestHitKHR;
+        case ShaderStage::Intersection:
+            return vk::ShaderStageFlagBits::eIntersectionKHR;
+        case ShaderStage::Miss:
+            return vk::ShaderStageFlagBits::eMissKHR;
+        case ShaderStage::RayGen:
+            return vk::ShaderStageFlagBits::eRaygenKHR;
+        case ShaderStage::VertexFragment:
+            return vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment;
+        default:
+            return vk::ShaderStageFlagBits::eAll;
+        }
+    }
+
+    vk::ShaderStageFlagBits MapSingleShaderStageForVulkan(const ShaderStage& stage)
     {
         switch (stage)
         {
@@ -2954,7 +2982,7 @@ namespace GFX
             }
         }
 
-        return vk::PresentModeKHR::eFifo;
+        return vk::PresentModeKHR::eMailbox;
     }
 
     vk::Extent2D ChooseSwapExtent(const vk::SurfaceCapabilitiesKHR& capabilities)

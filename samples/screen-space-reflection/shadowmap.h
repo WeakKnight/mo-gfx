@@ -30,6 +30,11 @@ public:
 	public:
 		glm::mat4 view;
 		glm::mat4 proj;
+		// layer0 near layer 0 far layer 1 near layer 1 far
+		glm::vec4 nearFarSettings;
+		glm::vec4 nothing;
+		glm::vec4 nothing1;
+		glm::vec4 nothing2;
 	};
 
 	struct Vertex
@@ -56,16 +61,79 @@ public:
 		m_height = height;
 	}
 
-	void Render(Scene* scene, glm::vec3 center, Camera* camera)
+	float Layer0Near = 0.3f;
+	float Layer0Far = 30.0f;
+
+	// return proj matrix for shadow map
+	ShadowMapUniformObject ComputeShadowMatrix(Camera* camera, glm::mat4& lightView, float aspect, float near, float far)
+	{
+		glm::vec4 lightDir = glm::vec4(glm::normalize(glm::vec3(100.463f, -26.725f, 0.0f)), 0.0f);
+
+		// Calculate 8 near layer corner In Camera Space
+		constexpr float fov = glm::radians(45.0f);
+		float yn = Layer0Near * tan(fov * 0.5);
+		float yf = Layer0Far * tan(fov * 0.5);
+		float xn = yn * aspect;
+		float xf = yf * aspect;
+		float zn = -Layer0Near;
+		float zf = -Layer0Far;
+
+		std::vector<glm::vec4> corners;
+		corners.reserve(8);
+		// near face
+		corners.push_back(glm::vec4(xn, yn, zn, 1.0f));
+		corners.push_back(glm::vec4(-xn, yn, zn, 1.0f));
+		corners.push_back(glm::vec4(xn, -yn, zn, 1.0f));
+		corners.push_back(glm::vec4(-xn, -yn, zn, 1.0f));
+		// far face
+		corners.push_back(glm::vec4(xn, yn, zf, 1.0f));
+		corners.push_back(glm::vec4(-xn, yn, zf, 1.0f));
+		corners.push_back(glm::vec4(xn, -yn, zf, 1.0f));
+		corners.push_back(glm::vec4(-xn, -yn, zf, 1.0f));
+
+		auto camInv = glm::inverse(camera->GetViewMatrix());
+		float minX = INFINITY;
+		float minY = INFINITY;
+		float minZ = INFINITY;
+		float maxX = -INFINITY;
+		float maxY = -INFINITY;
+		float maxZ = -INFINITY;
+
+		// Convert This Coner Points From Camera Space To World Space To Light Space
+		for (int i = 0; i < 8; i++)
+		{
+			auto cornerWorldSpace = camInv * corners[i];
+			corners[i] = lightView * cornerWorldSpace;
+
+			minX = Math::Min(minX, corners[i].x);
+			minY = Math::Min(minY, corners[i].y);
+			minZ = Math::Min(minZ, corners[i].z);
+
+			maxX = Math::Max(maxX, corners[i].x);
+			maxY = Math::Max(maxY, corners[i].y);
+			maxZ = Math::Max(maxZ, corners[i].z);
+		}
+
+		ShadowMapUniformObject result;
+		result.proj = glm::ortho(minX, maxX, minY, maxY, minZ, maxZ);
+		result.view = lightView;
+		result.nearFarSettings = glm::vec4(minZ, maxZ, 0.0f, 0.0f);
+		result.proj[1][1] *= -1.0;
+
+		return result;
+	}
+
+	void Render(Scene* scene, glm::vec3 center, Camera* camera, float aspect)
 	{
 		GFX::ApplyPipeline(pipeline);
 
-		ShadowMapUniformObject ubo;
-		ubo.proj = glm::ortho(-80.0f, 80.0f, -80.0f, 80.0f, 0.3f, 300.0f);
-		ubo.proj[1][1] *= -1;
+		
+		/*ubo.proj = glm::ortho(-10.0f, 10.0f, -10.0f, 10.0f, 0.3f, 40.0f);
+		ubo.proj[1][1] *= -1;*/
 		
 		glm::vec4 lightDir = glm::vec4(glm::normalize(glm::vec3(100.463f, -26.725f, 0.0f)), 0.0f);
 
+		
 		// 
 		 // Calculate the new Front vector
 		glm::vec3 Front = glm::normalize(lightDir);
@@ -78,8 +146,11 @@ public:
 		// Also re-calculate the Right and Up vector
 		glm::vec3 Right = glm::normalize(glm::cross(Front, WorldUp));  // Normalize the vectors, because their length gets closer to 0 the more you look up or down which results in slower movement.
 		glm::vec3 Up = glm::normalize(glm::cross(Right, Front));
-		ubo.view = glm::lookAt(center - 120.0f * glm::vec3(lightDir), center, Up);
-		// ubo.view = camera->GetViewMatrix();
+
+		glm::vec3 shadowPos = camera->Position + camera->Front * 5.0f - 10.0f * glm::vec3(lightDir);
+		auto lightView = glm::lookAt(shadowPos, shadowPos + 1.0f * glm::vec3(lightDir), Up);
+
+		ShadowMapUniformObject ubo = ComputeShadowMatrix(camera, lightView, aspect, Layer0Near, Layer0Far);
 
 		GFX::UpdateUniformBuffer(uniform, 0, &ubo);
 
@@ -124,7 +195,7 @@ private:
 	void CreatePipeline(GFX::RenderPass renderPass)
 	{
 		GFX::BufferDescription uniformBufferDesc = {};
-		uniformBufferDesc.size = GFX::UniformAlign(sizeof(ShadowMapUniformObject));
+		uniformBufferDesc.size = sizeof(ShadowMapUniformObject);
 		uniformBufferDesc.storageMode = GFX::BufferStorageMode::Dynamic;
 		uniformBufferDesc.usage = GFX::BufferUsage::UniformBuffer;
 
@@ -139,13 +210,13 @@ private:
 		vertexBindings.AddAttribute(2, offsetof(Vertex, uv), GFX::ValueType::Float32x2);
 
 		GFX::UniformLayoutDescription uniformLayoutDesc = {};
-		uniformLayoutDesc.AddUniformBinding(0, GFX::UniformType::UniformBuffer, GFX::ShaderStage::Vertex, 1);
+		uniformLayoutDesc.AddUniformBinding(0, GFX::UniformType::UniformBuffer, GFX::ShaderStage::VertexFragment, 1);
 		uniformLayout = GFX::CreateUniformLayout(uniformLayoutDesc);
 
 		GFX::UniformDescription uniformDesc = {};
 		uniformDesc.SetUniformLayout(uniformLayout);
 		uniformDesc.SetStorageMode(GFX::UniformStorageMode::Dynamic);
-		uniformDesc.AddBufferAttribute(0, uniformBuffer, 0, GFX::UniformAlign(sizeof(ShadowMapUniformObject)));
+		uniformDesc.AddBufferAttribute(0, uniformBuffer, 0, sizeof(ShadowMapUniformObject));
 		uniform = GFX::CreateUniform(uniformDesc);
 
 		GFX::UniformBindings uniformBindings = {};
