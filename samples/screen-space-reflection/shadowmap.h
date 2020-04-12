@@ -146,7 +146,7 @@ public:
 				float distance = glm::length(frustumCorners[i] - frustumCenter);
 				radius = glm::max(radius, distance);
 			}
-			radius = std::ceil(radius * 16.0f) / 16.0f;
+			radius = 2.0f * std::ceil(radius * 16.0f) / 16.0f;
 
 			glm::vec3 maxExtents = glm::vec3(radius);
 			glm::vec3 minExtents = -maxExtents;

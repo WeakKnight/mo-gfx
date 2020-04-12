@@ -84,6 +84,7 @@ static GFX::Uniform s_gatherUniform;
 static GFX::UniformLayout s_presentUniformLayout;
 static GFX::Uniform s_presentUniform;
 
+static GFX::Sampler s_depthSampler;
 static GFX::Sampler s_nearestSampler;
 static GFX::Sampler s_linearSampler;
 
@@ -310,10 +311,10 @@ static void framebufferResizeCallback(GLFWwindow* window, int width, int height)
 	gatherUniformDesc.AddBufferAttribute(2, s_gatheringPassUniformBuffer, 0, sizeof(GatheringPassUniformData));
 	gatherUniformDesc.AddImageAttribute(3, skybox->image, skybox->sampler);
 	gatherUniformDesc.AddImageAttribute(4, s_irradianceMap, skybox->sampler);
-	gatherUniformDesc.AddSampledAttachmentAttribute(5, s_meshRenderPass, DEPTH_ATTACHMENT_INDEX, s_nearestSampler);
-	gatherUniformDesc.AddSampledAttachmentAttribute(6, s_meshRenderPass, SHADOWMAP_DEPTH_ATTACHMENT_0_INDEX, s_nearestSampler);
-	gatherUniformDesc.AddSampledAttachmentAttribute(7, s_meshRenderPass, SHADOWMAP_DEPTH_ATTACHMENT_1_INDEX, s_nearestSampler);
-	gatherUniformDesc.AddSampledAttachmentAttribute(8, s_meshRenderPass, SHADOWMAP_DEPTH_ATTACHMENT_2_INDEX, s_nearestSampler);
+	gatherUniformDesc.AddSampledAttachmentAttribute(5, s_meshRenderPass, DEPTH_ATTACHMENT_INDEX, s_depthSampler);
+	gatherUniformDesc.AddSampledAttachmentAttribute(6, s_meshRenderPass, SHADOWMAP_DEPTH_ATTACHMENT_0_INDEX, s_depthSampler);
+	gatherUniformDesc.AddSampledAttachmentAttribute(7, s_meshRenderPass, SHADOWMAP_DEPTH_ATTACHMENT_1_INDEX, s_depthSampler);
+	gatherUniformDesc.AddSampledAttachmentAttribute(8, s_meshRenderPass, SHADOWMAP_DEPTH_ATTACHMENT_2_INDEX, s_depthSampler);
 
 	gatherUniformDesc.SetUniformLayout(s_gatherUniformLayout);
 	gatherUniformDesc.SetStorageMode(GFX::UniformStorageMode::Dynamic);
@@ -736,10 +737,10 @@ void CreateGatheringPipeline()
 	uniformDesc.AddBufferAttribute(2, s_gatheringPassUniformBuffer, 0, GFX::UniformAlign(sizeof(GatheringPassUniformData)));
 	uniformDesc.AddImageAttribute(3, skybox->image, skybox->sampler);
 	uniformDesc.AddImageAttribute(4, s_irradianceMap, skybox->sampler);
-	uniformDesc.AddSampledAttachmentAttribute(5, s_meshRenderPass, DEPTH_ATTACHMENT_INDEX, s_nearestSampler);
-	uniformDesc.AddSampledAttachmentAttribute(6, s_meshRenderPass, SHADOWMAP_DEPTH_ATTACHMENT_0_INDEX, s_nearestSampler);
-	uniformDesc.AddSampledAttachmentAttribute(7, s_meshRenderPass, SHADOWMAP_DEPTH_ATTACHMENT_1_INDEX, s_nearestSampler);
-	uniformDesc.AddSampledAttachmentAttribute(8, s_meshRenderPass, SHADOWMAP_DEPTH_ATTACHMENT_2_INDEX, s_nearestSampler);
+	uniformDesc.AddSampledAttachmentAttribute(5, s_meshRenderPass, DEPTH_ATTACHMENT_INDEX, s_depthSampler);
+	uniformDesc.AddSampledAttachmentAttribute(6, s_meshRenderPass, SHADOWMAP_DEPTH_ATTACHMENT_0_INDEX, s_depthSampler);
+	uniformDesc.AddSampledAttachmentAttribute(7, s_meshRenderPass, SHADOWMAP_DEPTH_ATTACHMENT_1_INDEX, s_depthSampler);
+	uniformDesc.AddSampledAttachmentAttribute(8, s_meshRenderPass, SHADOWMAP_DEPTH_ATTACHMENT_2_INDEX, s_depthSampler);
 	uniformDesc.SetUniformLayout(s_gatherUniformLayout);
 	uniformDesc.SetStorageMode(GFX::UniformStorageMode::Dynamic);
 
@@ -828,6 +829,14 @@ void ScreenSpaceReflectionExample::Init()
 	s_waterUniform = CreateModelUniformBlock("screen-space-reflection/white.jpg", "screen-space-reflection/black.tga");
 
 	s_meshRenderPass = CreateScreenSpaceReflectionRenderPass();
+
+	GFX::SamplerDescription depthSamplerDesc = {};
+	depthSamplerDesc.minFilter = GFX::FilterMode::Nearest;
+	depthSamplerDesc.magFilter = GFX::FilterMode::Nearest;
+	depthSamplerDesc.wrapU = GFX::WrapMode::ClampToBorder;
+	depthSamplerDesc.wrapV = GFX::WrapMode::ClampToBorder;
+	depthSamplerDesc.borderColor = GFX::BorderColor::FloatOpaqueWhite;
+	s_depthSampler = GFX::CreateSampler(depthSamplerDesc);
 
 	GFX::SamplerDescription nearestSamplerDesc = {};
 	nearestSamplerDesc.minFilter = GFX::FilterMode::Nearest;
@@ -1001,6 +1010,7 @@ void ScreenSpaceReflectionExample::CleanUp()
 	GFX::DestroyUniformLayout(s_presentUniformLayout);
 	GFX::DestroyUniform(s_presentUniform);
 
+	GFX::DestroySampler(s_depthSampler);
 	GFX::DestroySampler(s_nearestSampler);
 	GFX::DestroySampler(s_linearSampler);
 

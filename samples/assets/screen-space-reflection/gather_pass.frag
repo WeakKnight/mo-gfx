@@ -116,7 +116,7 @@ float ShadowedFactor(vec3 worldPos, float NDotL, uint usedCascade)
         fragDepth = WorldPosToDepth(worldPos, subo2.proj, subo2.view);
     }
 
-    if(fragDepth - 0.005 < shadowDepth)
+    if(fragDepth - 0.0005 < shadowDepth)
     {
         return 1.0;
     }
@@ -184,8 +184,22 @@ void main()
     }
 
     float shadowFactor = ShadowedFactor(posWS, NDotL, usedCascade);
+    vec3 blendColor = vec3(1.0, 1.0, 1.0);
+    
+    // if(usedCascade == 0)
+    // {
+    //     blendColor = vec3(0.8, 0.3, 0.3);
+    // }
+    // else if(usedCascade == 1)
+    // {
+    //     blendColor = vec3(0.3, 0.8, 0.3);
+    // }
+    // else if(usedCascade == 2)
+    // {
+    //     blendColor = vec3(0.3, 0.3, 0.8);
+    // }
 
-    outColor = vec4(shadowFactor * albedo + ambient + specular, 1.0);
+    outColor = vec4(blendColor * (shadowFactor * albedo + ambient + specular), 1.0);
 
     // if(posCS.z > -30.0)
     // {
