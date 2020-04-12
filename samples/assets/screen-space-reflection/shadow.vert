@@ -4,7 +4,8 @@ layout(binding = 0) uniform UniformBufferObject
 {
     mat4 view;
     mat4 proj;
-    vec4 nearFarSettings;
+    // split 0, split 1, split2
+    vec4 splitPoints;
     vec4 nothing;
 	vec4 nothing1;
 	vec4 nothing2;
@@ -21,6 +22,6 @@ out gl_PerVertex
 
 void main() 
 {    
-    vec4 pos = ubo.proj * ubo.view * vec4(inPosition, 1.0);
+    vec4 pos  = ubo.proj * ubo.view * vec4(inPosition, 1.0);
     gl_Position = pos;
 }

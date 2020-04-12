@@ -16,17 +16,42 @@ layout(binding = 2) uniform UniformBufferObject
 layout(binding = 3) uniform samplerCube skybox;
 layout(binding = 4) uniform samplerCube irradianceMap;
 layout(binding = 5) uniform sampler2D samplerDepth;
-layout(binding = 6) uniform sampler2D shadowMap;
+layout(binding = 6) uniform sampler2D shadowMap0;
+layout(binding = 7) uniform sampler2D shadowMap1;
+layout(binding = 8) uniform sampler2D shadowMap2;
 
-layout(binding = 0, set = 1) uniform ShadowUniformBufferObject 
+layout(binding = 0, set = 1) uniform ShadowUniformBufferObject0 
 {
     mat4 view;
     mat4 proj;
-    vec4 nearFarSettings;
+    // split 0, split 1, split2, currentIndex
+    vec4 splitPoints;
     vec4 nothing;
 	vec4 nothing1;
 	vec4 nothing2;
-} subo; 
+} subo0; 
+
+layout(binding = 0, set = 2) uniform ShadowUniformBufferObject1 
+{
+    mat4 view;
+    mat4 proj;
+    // split 0, split 1, split2, currentIndex
+    vec4 splitPoints;
+    vec4 nothing;
+	vec4 nothing1;
+	vec4 nothing2;
+} subo1; 
+
+layout(binding = 0, set = 3) uniform ShadowUniformBufferObject2 
+{
+    mat4 view;
+    mat4 proj;
+    // split 0, split 1, split2, currentIndex
+    vec4 splitPoints;
+    vec4 nothing;
+	vec4 nothing1;
+	vec4 nothing2;
+} subo2; 
 
 layout (location = 0) out vec4 outColor;
 
@@ -67,16 +92,31 @@ vec2 WorldSpaceToScreenSpace(vec3 worldPos, mat4 projMatrix, mat4 viewMatrix)
     return screenSpacePos.xy;
 }
 
-float ShadowedFactor(vec3 worldPos, float NDotL)
+float ShadowedFactor(vec3 worldPos, float NDotL, uint usedCascade)
 {
-    vec2 shadowUV = WorldSpaceToScreenSpace(worldPos, subo.proj, subo.view);
-    float shadowDepth = texture(shadowMap, shadowUV).r; 
-    float fragDepth = WorldPosToDepth(worldPos, subo.proj, subo.view);
-   
-    shadowDepth = LinearizeDepth(shadowDepth, subo.nearFarSettings.x ,  subo.nearFarSettings.y);
-    fragDepth = LinearizeDepth(fragDepth, subo.nearFarSettings.x , subo.nearFarSettings.y);
+    float shadowDepth = 1.0;
+    float fragDepth = 1.0;
 
-    if(fragDepth - 0.0001 < shadowDepth)
+    if(usedCascade == 0)
+    {
+        vec2 shadowUV = WorldSpaceToScreenSpace(worldPos, subo0.proj, subo0.view);
+        shadowDepth = texture(shadowMap0, shadowUV).r; 
+        fragDepth = WorldPosToDepth(worldPos, subo0.proj, subo0.view);
+    }
+    else if(usedCascade == 1)
+    {
+        vec2 shadowUV = WorldSpaceToScreenSpace(worldPos, subo1.proj, subo1.view);
+        shadowDepth = texture(shadowMap1, shadowUV).r; 
+        fragDepth = WorldPosToDepth(worldPos, subo1.proj, subo1.view);
+    }
+    else if(usedCascade == 2)
+    {
+        vec2 shadowUV = WorldSpaceToScreenSpace(worldPos, subo2.proj, subo2.view);
+        shadowDepth = texture(shadowMap2, shadowUV).r; 
+        fragDepth = WorldPosToDepth(worldPos, subo2.proj, subo2.view);
+    }
+
+    if(fragDepth - 0.005 < shadowDepth)
     {
         return 1.0;
     }
@@ -90,11 +130,11 @@ void main()
 {       
     vec4 normalRoughness = subpassLoad(samplerNormalRoughness);
 
-    if(inUV.x < 0.5)
-    {
-        outColor = vec4( texture(shadowMap,  vec2((inUV.x) * 2, inUV.y)).rrr, 1.0);
-        return;
-    }
+    // if(inUV.x < 0.5)
+    // {
+    //     outColor = vec4( texture(shadowMap,  vec2((inUV.x) * 2, inUV.y)).rrr, 1.0);
+    //     return;
+    // }
 
     if(length(normalRoughness.xyz) <= 0.0)
     {
@@ -107,6 +147,16 @@ void main()
 
     vec3 posWS = WorldPosFromDepth(currentDepth, projInv, viewInv);
     vec3 posCS = vec3(ubo.view * vec4(posWS, 1.0));
+
+    uint usedCascade = 0;
+    if(posCS.z < subo0.splitPoints.x)
+    {
+        usedCascade = 1;
+    }
+    if(posCS.z < subo0.splitPoints.y)
+    {
+        usedCascade = 2;
+    }
 
     vec3 N = normalize(normalRoughness.xyz * 2.0 - vec3(1.0));
     vec3 V =  normalize(-posCS);
@@ -133,18 +183,18 @@ void main()
         albedo = vec3(0.0, 0.0, 0.0);
     }
 
-    float shadowFactor = ShadowedFactor(posWS, NDotL);
+    float shadowFactor = ShadowedFactor(posWS, NDotL, usedCascade);
 
-    // outColor = vec4(shadowFactor * albedo + ambient + specular, 1.0);
+    outColor = vec4(shadowFactor * albedo + ambient + specular, 1.0);
 
-    if(posCS.z > -30.0)
-    {
-        outColor = vec4(vec3(0.8,0.3,0.3) * shadowFactor * albedo + 0.1 * ambient + specular, 1.0);
-    }
-    else
-    {
-        outColor = vec4(albedo + 0.1 * ambient + specular, 1.0);
-    }
+    // if(posCS.z > -30.0)
+    // {
+    //     outColor = vec4(vec3(0.8,0.3,0.3) * shadowFactor * albedo + 0.1 * ambient + specular, 1.0);
+    // }
+    // else
+    // {
+    //     outColor = vec4(albedo + 0.1 * ambient + specular, 1.0);
+    // }
     // outColor = vec4( texture(shadowMap, inUV).rrr, 1.0);
     // outColor = vec4(inUV, 0.0, 1.0);
     // outColor = vec4(WorldSpaceToScreenSpace(posWS, subo.proj, subo.view), 0.0, 1.0);

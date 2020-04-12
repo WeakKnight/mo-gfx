@@ -98,12 +98,16 @@ static Camera* s_camera = nullptr;
 #define NORMAL_ATTACHMENT_INDEX 2
 #define HDR_ATTACHMENT_INDEX 3
 #define DEPTH_ATTACHMENT_INDEX 4
-#define SHADOWMAP_DEPTH_ATTACHMENT_INDEX 5
+#define SHADOWMAP_DEPTH_ATTACHMENT_0_INDEX 5
+#define SHADOWMAP_DEPTH_ATTACHMENT_1_INDEX 6
+#define SHADOWMAP_DEPTH_ATTACHMENT_2_INDEX 7
 
-#define SHADOWMAP_PASS_INDEX 0
-#define MRT_PASS_INDEX 1
-#define GATHER_PASS_INDEX 2
-#define PRESENT_PASS_INDEX 3
+#define SHADOWMAP_PASS_0_INDEX 0
+#define SHADOWMAP_PASS_1_INDEX 1
+#define SHADOWMAP_PASS_2_INDEX 2
+#define MRT_PASS_INDEX 3
+#define GATHER_PASS_INDEX 4
+#define PRESENT_PASS_INDEX 5
 
 class Skybox
 {
@@ -307,7 +311,9 @@ static void framebufferResizeCallback(GLFWwindow* window, int width, int height)
 	gatherUniformDesc.AddImageAttribute(3, skybox->image, skybox->sampler);
 	gatherUniformDesc.AddImageAttribute(4, s_irradianceMap, skybox->sampler);
 	gatherUniformDesc.AddSampledAttachmentAttribute(5, s_meshRenderPass, DEPTH_ATTACHMENT_INDEX, s_nearestSampler);
-	gatherUniformDesc.AddSampledAttachmentAttribute(6, s_meshRenderPass, SHADOWMAP_DEPTH_ATTACHMENT_INDEX, s_nearestSampler);
+	gatherUniformDesc.AddSampledAttachmentAttribute(6, s_meshRenderPass, SHADOWMAP_DEPTH_ATTACHMENT_0_INDEX, s_nearestSampler);
+	gatherUniformDesc.AddSampledAttachmentAttribute(7, s_meshRenderPass, SHADOWMAP_DEPTH_ATTACHMENT_1_INDEX, s_nearestSampler);
+	gatherUniformDesc.AddSampledAttachmentAttribute(8, s_meshRenderPass, SHADOWMAP_DEPTH_ATTACHMENT_2_INDEX, s_nearestSampler);
 
 	gatherUniformDesc.SetUniformLayout(s_gatherUniformLayout);
 	gatherUniformDesc.SetStorageMode(GFX::UniformStorageMode::Dynamic);
@@ -511,24 +517,60 @@ GFX::RenderPass CreateScreenSpaceReflectionRenderPass()
 	depthAttachment.clearValue = depthClearColor;
 
 	// Index 5 Shadowmap Depth SHADOWMAP_DEPTH_ATTACHMENT_INDEX
-	GFX::AttachmentDescription shadowMapDepthAttachment = {};
-	shadowMapDepthAttachment.width = s_width;
-	shadowMapDepthAttachment.height = s_height;
-	shadowMapDepthAttachment.format = GFX::Format::DEPTH;
-	shadowMapDepthAttachment.type = GFX::AttachmentType::DepthStencil;
-	shadowMapDepthAttachment.loadAction = GFX::AttachmentLoadAction::Clear;
+	GFX::AttachmentDescription shadowMapDepthAttachment0 = {};
+	shadowMapDepthAttachment0.width = s_width;
+	shadowMapDepthAttachment0.height = s_height;
+	shadowMapDepthAttachment0.format = GFX::Format::DEPTH;
+	shadowMapDepthAttachment0.type = GFX::AttachmentType::DepthStencil;
+	shadowMapDepthAttachment0.loadAction = GFX::AttachmentLoadAction::Clear;
 
-	GFX::ClearValue shadowMapDepthClearColor = {};
-	shadowMapDepthClearColor.SetDepth(1.0f);
-	shadowMapDepthAttachment.clearValue = shadowMapDepthClearColor;
+	GFX::ClearValue shadowMapDepthClearColor0 = {};
+	shadowMapDepthClearColor0.SetDepth(1.0f);
+	shadowMapDepthAttachment0.clearValue = shadowMapDepthClearColor0;
+
+	// Index 6 Shadowmap Depth SHADOWMAP_DEPTH_ATTACHMENT_INDEX
+	GFX::AttachmentDescription shadowMapDepthAttachment1 = {};
+	shadowMapDepthAttachment1.width = s_width;
+	shadowMapDepthAttachment1.height = s_height;
+	shadowMapDepthAttachment1.format = GFX::Format::DEPTH;
+	shadowMapDepthAttachment1.type = GFX::AttachmentType::DepthStencil;
+	shadowMapDepthAttachment1.loadAction = GFX::AttachmentLoadAction::Clear;
+
+	GFX::ClearValue shadowMapDepthClearColor1 = {};
+	shadowMapDepthClearColor1.SetDepth(1.0f);
+	shadowMapDepthAttachment1.clearValue = shadowMapDepthClearColor1;
+
+	// Index 7 Shadowmap Depth SHADOWMAP_DEPTH_ATTACHMENT_INDEX
+	GFX::AttachmentDescription shadowMapDepthAttachment2 = {};
+	shadowMapDepthAttachment2.width = s_width;
+	shadowMapDepthAttachment2.height = s_height;
+	shadowMapDepthAttachment2.format = GFX::Format::DEPTH;
+	shadowMapDepthAttachment2.type = GFX::AttachmentType::DepthStencil;
+	shadowMapDepthAttachment2.loadAction = GFX::AttachmentLoadAction::Clear;
+
+	GFX::ClearValue shadowMapDepthClearColor2 = {};
+	shadowMapDepthClearColor2.SetDepth(1.0f);
+	shadowMapDepthAttachment2.clearValue = shadowMapDepthClearColor2;
 
 	// Subpass 0, Shadowmap Pass
-	GFX::SubPassDescription subpassShadowMap = {};
-	subpassShadowMap.colorAttachments.push_back(0);
-	subpassShadowMap.SetDepthStencilAttachment(SHADOWMAP_DEPTH_ATTACHMENT_INDEX);
-	subpassShadowMap.pipelineType = GFX::PipelineType::Graphics;
+	GFX::SubPassDescription subpassShadowMap0 = {};
+	//subpassShadowMap0.colorAttachments.push_back(0);
+	subpassShadowMap0.SetDepthStencilAttachment(SHADOWMAP_DEPTH_ATTACHMENT_0_INDEX);
+	subpassShadowMap0.pipelineType = GFX::PipelineType::Graphics;
 
-	// Subpass 1, GBufferPass
+	// Subpass 1, Shadowmap Pass
+	GFX::SubPassDescription subpassShadowMap1 = {};
+	//subpassShadowMap1.colorAttachments.push_back(0);
+	subpassShadowMap1.SetDepthStencilAttachment(SHADOWMAP_DEPTH_ATTACHMENT_1_INDEX);
+	subpassShadowMap1.pipelineType = GFX::PipelineType::Graphics;
+
+	// Subpass 2, Shadowmap Pass
+	GFX::SubPassDescription subpassShadowMap2 = {};
+	//subpassShadowMap2.colorAttachments.push_back(0);
+	subpassShadowMap2.SetDepthStencilAttachment(SHADOWMAP_DEPTH_ATTACHMENT_2_INDEX);
+	subpassShadowMap2.pipelineType = GFX::PipelineType::Graphics;
+
+	// Subpass 3, GBufferPass
 	GFX::SubPassDescription subpassGBuffer = {};
 	// Albedo
 	subpassGBuffer.colorAttachments.push_back(ALBEDO_ATTACHMENT_INDEX);
@@ -538,19 +580,21 @@ GFX::RenderPass CreateScreenSpaceReflectionRenderPass()
 	subpassGBuffer.SetDepthStencilAttachment(DEPTH_ATTACHMENT_INDEX);
 	subpassGBuffer.pipelineType = GFX::PipelineType::Graphics;
 	
-	// Subpass 2 Gathering Pass
+	// Subpass 4 Gathering Pass
 	GFX::SubPassDescription subpassGather = {};
 	// Render To HDR Pass
 	subpassGather.colorAttachments.push_back(HDR_ATTACHMENT_INDEX);
-	//// G Buffer
+	// G Buffer
 	subpassGather.inputAttachments.push_back(ALBEDO_ATTACHMENT_INDEX);
 	subpassGather.inputAttachments.push_back(NORMAL_ATTACHMENT_INDEX);
 	subpassGather.inputAttachments.push_back(DEPTH_ATTACHMENT_INDEX);
-	subpassGather.inputAttachments.push_back(SHADOWMAP_DEPTH_ATTACHMENT_INDEX);
+	subpassGather.inputAttachments.push_back(SHADOWMAP_DEPTH_ATTACHMENT_0_INDEX);
+	subpassGather.inputAttachments.push_back(SHADOWMAP_DEPTH_ATTACHMENT_1_INDEX);
+	subpassGather.inputAttachments.push_back(SHADOWMAP_DEPTH_ATTACHMENT_2_INDEX);
 
 	subpassGather.pipelineType = GFX::PipelineType::Graphics;
 
-	// Subpass 3 Present
+	// Subpass 5 Present
 	GFX::SubPassDescription subpassPresent = {};
 	// Render To Swapchain
 	subpassPresent.colorAttachments.push_back(0);
@@ -582,6 +626,22 @@ GFX::RenderPass CreateScreenSpaceReflectionRenderPass()
 	dependencyDesc2.srcAccess = GFX::Access::ColorAttachmentWrite;
 	dependencyDesc2.dstAccess = GFX::Access::ShaderRead;
 
+	GFX::DependencyDescription dependencyDesc3 = {};
+	dependencyDesc3.srcSubpass = 3;
+	dependencyDesc3.dstSubpass = 4;
+	dependencyDesc3.srcStage = GFX::PipelineStage::ColorAttachmentOutput;
+	dependencyDesc3.dstStage = GFX::PipelineStage::FragmentShader;
+	dependencyDesc3.srcAccess = GFX::Access::ColorAttachmentWrite;
+	dependencyDesc3.dstAccess = GFX::Access::ShaderRead;
+
+	GFX::DependencyDescription dependencyDesc4 = {};
+	dependencyDesc4.srcSubpass = 4;
+	dependencyDesc4.dstSubpass = 5;
+	dependencyDesc4.srcStage = GFX::PipelineStage::ColorAttachmentOutput;
+	dependencyDesc4.dstStage = GFX::PipelineStage::FragmentShader;
+	dependencyDesc4.srcAccess = GFX::Access::ColorAttachmentWrite;
+	dependencyDesc4.dstAccess = GFX::Access::ShaderRead;
+
 	GFX::RenderPassDescription renderPassDesc = {};
 	renderPassDesc.width = s_width;
 	renderPassDesc.height = s_height;
@@ -591,9 +651,13 @@ GFX::RenderPass CreateScreenSpaceReflectionRenderPass()
 	renderPassDesc.attachments.push_back(gBufferNormalRoughnessAttachment);
 	renderPassDesc.attachments.push_back(hdrAttachment);
 	renderPassDesc.attachments.push_back(depthAttachment);
-	renderPassDesc.attachments.push_back(shadowMapDepthAttachment);
+	renderPassDesc.attachments.push_back(shadowMapDepthAttachment0);
+	renderPassDesc.attachments.push_back(shadowMapDepthAttachment1);
+	renderPassDesc.attachments.push_back(shadowMapDepthAttachment2);
 
-	renderPassDesc.subpasses.push_back(subpassShadowMap);
+	renderPassDesc.subpasses.push_back(subpassShadowMap0);
+	renderPassDesc.subpasses.push_back(subpassShadowMap1);
+	renderPassDesc.subpasses.push_back(subpassShadowMap2);
 	renderPassDesc.subpasses.push_back(subpassGBuffer);
 	renderPassDesc.subpasses.push_back(subpassGather);
 	renderPassDesc.subpasses.push_back(subpassPresent);
@@ -601,6 +665,8 @@ GFX::RenderPass CreateScreenSpaceReflectionRenderPass()
 	renderPassDesc.dependencies.push_back(dependencyDesc0);
 	renderPassDesc.dependencies.push_back(dependencyDesc1);
 	renderPassDesc.dependencies.push_back(dependencyDesc2);
+	renderPassDesc.dependencies.push_back(dependencyDesc3);
+	renderPassDesc.dependencies.push_back(dependencyDesc4);
 
 	return GFX::CreateRenderPass(renderPassDesc);
 }
@@ -658,6 +724,8 @@ void CreateGatheringPipeline()
 	uniformLayoutDescription.AddUniformBinding(4, GFX::UniformType::SampledImage, GFX::ShaderStage::Fragment, 1);
 	uniformLayoutDescription.AddUniformBinding(5, GFX::UniformType::SampledImage, GFX::ShaderStage::Fragment, 1);
 	uniformLayoutDescription.AddUniformBinding(6, GFX::UniformType::SampledImage, GFX::ShaderStage::Fragment, 1);
+	uniformLayoutDescription.AddUniformBinding(7, GFX::UniformType::SampledImage, GFX::ShaderStage::Fragment, 1);
+	uniformLayoutDescription.AddUniformBinding(8, GFX::UniformType::SampledImage, GFX::ShaderStage::Fragment, 1);
 
     s_gatherUniformLayout =	GFX::CreateUniformLayout(uniformLayoutDescription);
 
@@ -669,7 +737,9 @@ void CreateGatheringPipeline()
 	uniformDesc.AddImageAttribute(3, skybox->image, skybox->sampler);
 	uniformDesc.AddImageAttribute(4, s_irradianceMap, skybox->sampler);
 	uniformDesc.AddSampledAttachmentAttribute(5, s_meshRenderPass, DEPTH_ATTACHMENT_INDEX, s_nearestSampler);
-	uniformDesc.AddSampledAttachmentAttribute(6, s_meshRenderPass, SHADOWMAP_DEPTH_ATTACHMENT_INDEX, s_nearestSampler);
+	uniformDesc.AddSampledAttachmentAttribute(6, s_meshRenderPass, SHADOWMAP_DEPTH_ATTACHMENT_0_INDEX, s_nearestSampler);
+	uniformDesc.AddSampledAttachmentAttribute(7, s_meshRenderPass, SHADOWMAP_DEPTH_ATTACHMENT_1_INDEX, s_nearestSampler);
+	uniformDesc.AddSampledAttachmentAttribute(8, s_meshRenderPass, SHADOWMAP_DEPTH_ATTACHMENT_2_INDEX, s_nearestSampler);
 	uniformDesc.SetUniformLayout(s_gatherUniformLayout);
 	uniformDesc.SetStorageMode(GFX::UniformStorageMode::Dynamic);
 
@@ -679,6 +749,8 @@ void CreateGatheringPipeline()
 
 	GFX::UniformBindings uniformBindings = {};
 	uniformBindings.AddUniformLayout(s_gatherUniformLayout);
+	uniformBindings.AddUniformLayout(s_shadowMap->uniformLayout);
+	uniformBindings.AddUniformLayout(s_shadowMap->uniformLayout);
 	uniformBindings.AddUniformLayout(s_shadowMap->uniformLayout);
 
 	s_gatherPipelineObject = new PipelineObject();
@@ -822,6 +894,8 @@ void ScreenSpaceReflectionExample::MainLoop()
 			s_camera->ProcessKeyboard(Camera_Movement::RIGHT, deltaTime);
 		}
 
+		s_camera->UpdateAspect(s_width, s_height);
+
 		if (GFX::BeginFrame())
 		{
 			GFX::BeginRenderPass(s_meshRenderPass, 0, 0, s_width, s_height);
@@ -840,13 +914,11 @@ void ScreenSpaceReflectionExample::MainLoop()
 
 			UniformBufferObject ubo = {};
 			ubo.view = s_camera->GetViewMatrix();
-			ubo.proj = glm::perspective(glm::radians(s_camera->fov), (float)s_width / (float)s_height, s_camera->near, s_camera->far);
-			ubo.proj[1][1] *= -1;
+			ubo.proj = s_camera->GetProjectionMatrix();
 
 			GatheringPassUniformData gatherPassUBO = {};
 			gatherPassUBO.view = s_camera->GetViewMatrix();
-			gatherPassUBO.proj = glm::perspective(glm::radians(s_camera->fov), (float)s_width / (float)s_height, s_camera->near, s_camera->far);
-			gatherPassUBO.proj[1][1] *= -1;
+			gatherPassUBO.proj = s_camera->GetProjectionMatrix();
 			gatherPassUBO.lightDir = lightDir;
 			gatherPassUBO.lightColor = glm::vec4(0.7f, 0.4f, 0.5f, 1.0f);
 
@@ -887,7 +959,9 @@ void ScreenSpaceReflectionExample::MainLoop()
 
 			GFX::ApplyPipeline(s_gatherPipelineObject->pipeline);
 			GFX::BindUniform(s_gatherUniform, 0);
-			GFX::BindUniform(s_shadowMap->uniform, 1);
+			GFX::BindUniform(s_shadowMap->uniform0, 1);
+			GFX::BindUniform(s_shadowMap->uniform1, 2);
+			GFX::BindUniform(s_shadowMap->uniform2, 3);
 			GFX::Draw(3, 1, 0, 0);
 
 			GFX::NextSubpass();

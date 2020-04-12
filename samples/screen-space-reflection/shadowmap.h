@@ -6,32 +6,51 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtx/matrix_decompose.hpp>
 #include <glm/gtx/euler_angles.hpp>
+#include <array>
 
 #include "string_utils.h"
 #include "mesh.h"
 
 #include "camera.h"
 
+#define SHADOW_MAP_CASCADE_COUNT 3
+
 class ShadowMap
 {
 public:
 	~ShadowMap()
 	{
-		GFX::DestroyPipeline(pipeline);
+		GFX::DestroyPipeline(pipeline0);
+		GFX::DestroyPipeline(pipeline1);
+		GFX::DestroyPipeline(pipeline2);
 		GFX::DestroyShader(vertShader);
 		GFX::DestroyShader(fragShader);
 		GFX::DestroyUniformLayout(uniformLayout);
-		GFX::DestroyUniform(uniform);
-		GFX::DestroyBuffer(uniformBuffer);
+		GFX::DestroyUniform(uniform0);
+		GFX::DestroyBuffer(uniformBuffer0);
+		GFX::DestroyUniform(uniform1);
+		GFX::DestroyBuffer(uniformBuffer1);
+		GFX::DestroyUniform(uniform2);
+		GFX::DestroyBuffer(uniformBuffer2);
 	}
+
+	struct Cascade
+	{
+		float splitDepth;
+		glm::mat4 proj;
+		glm::mat4 view;
+	};
+
+	std::array<Cascade, SHADOW_MAP_CASCADE_COUNT> cascades = {};
+	float cascadeSplitLambda = 0.9f;
 
 	class ShadowMapUniformObject
 	{
 	public:
 		glm::mat4 view;
 		glm::mat4 proj;
-		// layer0 near layer 0 far layer 1 near layer 1 far
-		glm::vec4 nearFarSettings;
+		// split 0, split 1, split2, currentIndex
+		glm::vec4 splitPoints;
 		glm::vec4 nothing;
 		glm::vec4 nothing1;
 		glm::vec4 nothing2;
@@ -61,87 +80,135 @@ public:
 		m_height = height;
 	}
 
-	float Layer0Far = 30.0f;
-
 	// return proj matrix for shadow map
-	ShadowMapUniformObject ComputeShadowMatrix(Camera* camera, glm::mat4& lightView, float aspect, float near, float far)
+	void ComputeShadowMatrix(Camera* camera, glm::vec3 lightDir)
 	{
-		// Calculate 8 near layer corner In Camera Space
-		float VFov = glm::radians(camera->fov);
-		float HFov = glm::radians(aspect * camera->fov);
-		float yn = near * tan(VFov * 0.5);
-		float yf = far * tan(VFov * 0.5);
-		float xn = near * tan(HFov * 0.5);
-		float xf = far * tan(HFov * 0.5);
-		float zn = near;
-		float zf = far;
+		float cascadeSplits[SHADOW_MAP_CASCADE_COUNT];
 
-		std::vector<glm::vec4> corners;
-		corners.reserve(8);
-		// near face
-		corners.push_back(glm::vec4(xn, yn, zn, 1.0f));
-		corners.push_back(glm::vec4(-xn, yn, zn, 1.0f));
-		corners.push_back(glm::vec4(xn, -yn, zn, 1.0f));
-		corners.push_back(glm::vec4(-xn, -yn, zn, 1.0f));
-		// far face
-		corners.push_back(glm::vec4(xf, yf, zf, 1.0f));
-		corners.push_back(glm::vec4(-xf, yf, zf, 1.0f));
-		corners.push_back(glm::vec4(xf, -yf, zf, 1.0f));
-		corners.push_back(glm::vec4(-xf, -yf, zf, 1.0f));
+		float nearClip = camera->near;
+		float farClip = camera->far;
+		float clipRange = farClip - nearClip;
 
-		auto camInv = glm::inverse(camera->GetViewMatrix());
-		float minX = INFINITY;
-		float minY = INFINITY;
-		float minZ = INFINITY;
-		float maxX = -INFINITY;
-		float maxY = -INFINITY;
-		float maxZ = -INFINITY;
+		float minZ = nearClip;
+		float maxZ = nearClip + clipRange;
 
-		// Convert This Coner Points From Camera Space To World Space To Light Space
-		for (int i = 0; i < 8; i++)
-		{
-			auto cornerWorldSpace = camInv * corners[i];
-			corners[i] = lightView * cornerWorldSpace;
+		float range = maxZ - minZ;
+		float ratio = maxZ / minZ;
 
-			minX = Math::Min(minX, corners[i].x);
-			minY = Math::Min(minY, corners[i].y);
-			minZ = Math::Min(minZ, corners[i].z);
-
-			maxX = Math::Max(maxX, corners[i].x);
-			maxY = Math::Max(maxY, corners[i].y);
-			maxZ = Math::Max(maxZ, corners[i].z);
+		// Calculate split depths based on view camera furstum
+		// Based on method presentd in https://developer.nvidia.com/gpugems/GPUGems3/gpugems3_ch10.html
+		for (uint32_t i = 0; i < SHADOW_MAP_CASCADE_COUNT; i++) {
+			float p = (i + 1) / static_cast<float>(SHADOW_MAP_CASCADE_COUNT);
+			float log = minZ * std::pow(ratio, p);
+			float uniform = minZ + range * p;
+			float d = cascadeSplitLambda * (log - uniform) + uniform;
+			cascadeSplits[i] = (d - nearClip) / clipRange;
 		}
 
-		ShadowMapUniformObject result;
-		result.proj = glm::ortho(minX, maxX, minY, maxY, minZ, maxZ);
-		result.view = lightView;
-		result.nearFarSettings = glm::vec4(minZ, maxZ, 0.0f, 0.0f);
-		result.proj[1][1] *= -1.0;
+		// Calculate orthographic projection matrix for each cascade
+		float lastSplitDist = 0.0;
+		for (uint32_t i = 0; i < SHADOW_MAP_CASCADE_COUNT; i++) {
+			float splitDist = cascadeSplits[i];
 
-		return result;
+			glm::vec3 frustumCorners[8] = {
+				glm::vec3(-1.0f,  1.0f, -1.0f),
+				glm::vec3(1.0f,  1.0f, -1.0f),
+				glm::vec3(1.0f, -1.0f, -1.0f),
+				glm::vec3(-1.0f, -1.0f, -1.0f),
+				glm::vec3(-1.0f,  1.0f,  1.0f),
+				glm::vec3(1.0f,  1.0f,  1.0f),
+				glm::vec3(1.0f, -1.0f,  1.0f),
+				glm::vec3(-1.0f, -1.0f,  1.0f),
+			};
+
+			// Project frustum corners into world space
+			glm::mat4 invCam = glm::inverse(camera->GetProjectionMatrix() * camera->GetViewMatrix());
+			for (uint32_t i = 0; i < 8; i++) {
+				glm::vec4 invCorner = invCam * glm::vec4(frustumCorners[i], 1.0f);
+				frustumCorners[i] = invCorner / invCorner.w;
+			}
+
+			for (uint32_t i = 0; i < 4; i++) {
+				glm::vec3 dist = frustumCorners[i + 4] - frustumCorners[i];
+				frustumCorners[i + 4] = frustumCorners[i] + (dist * splitDist);
+				frustumCorners[i] = frustumCorners[i] + (dist * lastSplitDist);
+			}
+
+			// Get frustum center
+			glm::vec3 frustumCenter = glm::vec3(0.0f);
+			for (uint32_t i = 0; i < 8; i++) {
+				frustumCenter += frustumCorners[i];
+			}
+			frustumCenter /= 8.0f;
+
+			float radius = 0.0f;
+			for (uint32_t i = 0; i < 8; i++) {
+				float distance = glm::length(frustumCorners[i] - frustumCenter);
+				radius = glm::max(radius, distance);
+			}
+			radius = std::ceil(radius * 16.0f) / 16.0f;
+
+			glm::vec3 maxExtents = glm::vec3(radius);
+			glm::vec3 minExtents = -maxExtents;
+
+			glm::mat4 lightViewMatrix = glm::lookAt(frustumCenter - lightDir * -minExtents.z, frustumCenter, glm::vec3(0.0f, 1.0f, 0.0f));
+			glm::mat4 lightOrthoMatrix = glm::ortho(minExtents.x, maxExtents.x, minExtents.y, maxExtents.y, 0.0f, maxExtents.z - minExtents.z);
+			lightOrthoMatrix[1][1] *= -1.0f;
+			// Store split distance and matrix in cascade
+			cascades[i].splitDepth = (camera->near + splitDist * clipRange) * -1.0f;
+			cascades[i].view = lightViewMatrix;
+			cascades[i].proj = lightOrthoMatrix;
+
+			lastSplitDist = cascadeSplits[i];
+		}
+
+
+		ubo0.view = cascades[0].view;
+		ubo0.proj = cascades[0].proj;
+		ubo0.splitPoints = glm::vec4(cascades[0].splitDepth, cascades[1].splitDepth, cascades[2].splitDepth, 0);
+
+		ubo1.view = cascades[1].view;
+		ubo1.proj = cascades[1].proj;
+		ubo1.splitPoints = glm::vec4(cascades[0].splitDepth, cascades[1].splitDepth, cascades[2].splitDepth, 1);
+
+		ubo2.view = cascades[2].view;
+		ubo2.proj = cascades[2].proj;
+		ubo2.splitPoints = glm::vec4(cascades[0].splitDepth, cascades[1].splitDepth, cascades[2].splitDepth, 2);
 	}
 
 	void Render(Scene* scene, glm::vec3 center, Camera* camera, float aspect, glm::vec4 lightDir)
 	{
-		GFX::ApplyPipeline(pipeline);
+		GFX::ApplyPipeline(pipeline0);
 
-		// Calculate the new Front vector
-		glm::vec3 Front = glm::normalize(lightDir);
-		glm::vec3 WorldUp = glm::vec3(0.0f, 1.0f, 0.0f);
-		if (abs(glm::length(Front + WorldUp) - 0.0f) <= 0.00001f)
+		ComputeShadowMatrix(camera, glm::vec3(lightDir));
+		GFX::UpdateUniformBuffer(uniform0, 0, &ubo0);
+		GFX::BindUniform(uniform0, 0);
+
+		for (auto mesh : scene->meshes)
 		{
-			WorldUp += glm::vec3(0.0001f, 0.0f, 0.0f);
-			WorldUp = glm::normalize(WorldUp);
+			GFX::BindVertexBuffer(mesh->vertexBuffer, 0);
+			GFX::BindIndexBuffer(mesh->indexBuffer, 0, GFX::IndexType::UInt32);
+			GFX::DrawIndexed(mesh->indices.size(), 1, 0);
 		}
-		// Also re-calculate the Right and Up vector
-		glm::vec3 Right = glm::normalize(glm::cross(Front, WorldUp));  // Normalize the vectors, because their length gets closer to 0 the more you look up or down which results in slower movement.
-		glm::vec3 Up = glm::normalize(glm::cross(Right, Front));
 
-		auto lightView = glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), Front, Up);
+		GFX::NextSubpass();
+		GFX::ApplyPipeline(pipeline1);
+		
+		GFX::UpdateUniformBuffer(uniform1, 0, &ubo1);
+		GFX::BindUniform(uniform1, 0);
 
-		ShadowMapUniformObject ubo = ComputeShadowMatrix(camera, lightView * glm::eulerAngleXYZ(glm::radians(0.0f), glm::radians(0.0f), glm::radians(0.0f)), aspect, camera->near, Layer0Far);
-		GFX::UpdateUniformBuffer(uniform, 0, &ubo);
-		GFX::BindUniform(uniform, 0);
+		for (auto mesh : scene->meshes)
+		{
+			GFX::BindVertexBuffer(mesh->vertexBuffer, 0);
+			GFX::BindIndexBuffer(mesh->indexBuffer, 0, GFX::IndexType::UInt32);
+			GFX::DrawIndexed(mesh->indices.size(), 1, 0);
+		}
+
+		GFX::NextSubpass();
+		GFX::ApplyPipeline(pipeline2);
+
+		GFX::UpdateUniformBuffer(uniform2, 0, &ubo2);
+		GFX::BindUniform(uniform2, 0);
 
 		for (auto mesh : scene->meshes)
 		{
@@ -151,10 +218,23 @@ public:
 		}
 	}
 
-	GFX::Buffer uniformBuffer = {};
+	ShadowMapUniformObject ubo0 = {};
+	ShadowMapUniformObject ubo1 = {};
+	ShadowMapUniformObject ubo2 = {};
+
+	GFX::Buffer uniformBuffer0 = {};
+	GFX::Buffer uniformBuffer1 = {};
+	GFX::Buffer uniformBuffer2 = {};
+
 	GFX::UniformLayout uniformLayout = {};
-	GFX::Uniform uniform = {};
-	GFX::Pipeline pipeline = {};
+	GFX::Uniform uniform0 = {};
+	GFX::Uniform uniform1 = {};
+	GFX::Uniform uniform2 = {};
+	
+	GFX::Pipeline pipeline0 = {};
+	GFX::Pipeline pipeline1 = {};
+	GFX::Pipeline pipeline2 = {};
+
 	GFX::Shader vertShader = {};
 	GFX::Shader fragShader = {};
 
@@ -186,7 +266,9 @@ private:
 		uniformBufferDesc.storageMode = GFX::BufferStorageMode::Dynamic;
 		uniformBufferDesc.usage = GFX::BufferUsage::UniformBuffer;
 
-		uniformBuffer = GFX::CreateBuffer(uniformBufferDesc);
+		uniformBuffer0 = GFX::CreateBuffer(uniformBufferDesc);
+		uniformBuffer1 = GFX::CreateBuffer(uniformBufferDesc);
+		uniformBuffer2 = GFX::CreateBuffer(uniformBufferDesc);
 
 		GFX::VertexBindings vertexBindings = {};
 		vertexBindings.SetBindingPosition(0);
@@ -200,11 +282,23 @@ private:
 		uniformLayoutDesc.AddUniformBinding(0, GFX::UniformType::UniformBuffer, GFX::ShaderStage::VertexFragment, 1);
 		uniformLayout = GFX::CreateUniformLayout(uniformLayoutDesc);
 
-		GFX::UniformDescription uniformDesc = {};
-		uniformDesc.SetUniformLayout(uniformLayout);
-		uniformDesc.SetStorageMode(GFX::UniformStorageMode::Dynamic);
-		uniformDesc.AddBufferAttribute(0, uniformBuffer, 0, sizeof(ShadowMapUniformObject));
-		uniform = GFX::CreateUniform(uniformDesc);
+		GFX::UniformDescription uniformDesc0 = {};
+		uniformDesc0.SetUniformLayout(uniformLayout);
+		uniformDesc0.SetStorageMode(GFX::UniformStorageMode::Dynamic);
+		uniformDesc0.AddBufferAttribute(0, uniformBuffer0, 0, sizeof(ShadowMapUniformObject));
+		uniform0 = GFX::CreateUniform(uniformDesc0);
+
+		GFX::UniformDescription uniformDesc1 = {};
+		uniformDesc1.SetUniformLayout(uniformLayout);
+		uniformDesc1.SetStorageMode(GFX::UniformStorageMode::Dynamic);
+		uniformDesc1.AddBufferAttribute(0, uniformBuffer1, 0, sizeof(ShadowMapUniformObject));
+		uniform1 = GFX::CreateUniform(uniformDesc1);
+
+		GFX::UniformDescription uniformDesc2 = {};
+		uniformDesc2.SetUniformLayout(uniformLayout);
+		uniformDesc2.SetStorageMode(GFX::UniformStorageMode::Dynamic);
+		uniformDesc2.AddBufferAttribute(0, uniformBuffer2, 0, sizeof(ShadowMapUniformObject));
+		uniform2 = GFX::CreateUniform(uniformDesc2);
 
 		GFX::UniformBindings uniformBindings = {};
 		uniformBindings.AddUniformLayout(uniformLayout);
@@ -214,7 +308,6 @@ private:
 		pipelineDesc.enableStencilTest = false;
 		pipelineDesc.primitiveTopology = GFX::PrimitiveTopology::TriangleList;
 		pipelineDesc.renderPass = renderPass;
-		pipelineDesc.subpass = 0;
 		pipelineDesc.vertexBindings = vertexBindings;
 		pipelineDesc.uniformBindings = uniformBindings;
 		pipelineDesc.shaders.push_back(vertShader);
@@ -226,7 +319,12 @@ private:
 			pipelineDesc.blendStates.push_back({});
 		}
 
-		pipeline = GFX::CreatePipeline(pipelineDesc);
+		pipelineDesc.subpass = 0;
+		pipeline0 = GFX::CreatePipeline(pipelineDesc);
+		pipelineDesc.subpass = 1;
+		pipeline1 = GFX::CreatePipeline(pipelineDesc);
+		pipelineDesc.subpass = 2;
+		pipeline2 = GFX::CreatePipeline(pipelineDesc);
 	}
 
 	ShadowMap()

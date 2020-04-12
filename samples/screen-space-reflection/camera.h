@@ -43,6 +43,8 @@ public:
     float far = 150.0f;
     float fov = 45.0f;
 
+    float aspect = 1.0f;
+
     // Constructor with vectors
     Camera(glm::vec3 position = glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3 up = glm::vec3(0.0f, 1.0f, 0.0f), float yaw = YAW, float pitch = PITCH) : Front(glm::vec3(0.0f, 0.0f, -1.0f)), MovementSpeed(SPEED), MouseSensitivity(SENSITIVITY), Zoom(ZOOM)
     {
@@ -66,6 +68,19 @@ public:
     glm::mat4 GetViewMatrix() const 
     {
         return glm::lookAt(Position, Position + Front, Up);
+    }
+
+    void UpdateAspect(float width, float height)
+    {
+        aspect = width / height;
+    }
+
+    glm::mat4 GetProjectionMatrix() const
+    {
+        auto result = glm::perspective(glm::radians(fov), aspect, near, far);
+        result[1][1] *= -1.0f;
+
+        return result;
     }
 
     // Processes input received from any keyboard-like input system. Accepts input parameter in the form of camera defined ENUM (to abstract it from windowing systems)
