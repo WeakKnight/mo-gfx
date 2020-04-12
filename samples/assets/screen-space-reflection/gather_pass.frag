@@ -118,7 +118,7 @@ void main()
     float roughness = normalRoughness.w;
 
     vec3 specular = vec3(0.0, 0.0, 0.0);
-    vec3 albedo = (NDotL * 10005.0 * ubo.lightColor.rgb) * subpassLoad(samplerAlbedo).rgb;
+    vec3 albedo = (NDotL * ubo.lightColor.rgb) * subpassLoad(samplerAlbedo).rgb;
     vec3 ambient = radiance * subpassLoad(samplerAlbedo).rgb;
     
     if(roughness < 0.5)
@@ -132,11 +132,11 @@ void main()
     // outColor = vec4(shadowFactor * albedo + ambient + specular, 1.0);
     if(posCS.z > -30.0)
     {
-        outColor = vec4(1.0, 0.0, 0.0,1.0);
+        outColor = vec4(vec3(0.8,0.3,0.3) * albedo + 0.1 * ambient + specular, 1.0);
     }
     else
     {
-        outColor = vec4(shadowFactor * albedo + 0.1 * ambient + specular, 1.0);
+        outColor = vec4(albedo + 0.1 * ambient + specular, 1.0);
     }
     // outColor = vec4( texture(shadowMap, inUV).rrr, 1.0);
     // outColor = vec4(inUV, 0.0, 1.0);

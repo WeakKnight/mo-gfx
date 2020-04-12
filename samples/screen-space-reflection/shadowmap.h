@@ -75,8 +75,8 @@ public:
 		float yf = Layer0Far * tan(fov * 0.5);
 		float xn = yn * aspect;
 		float xf = yf * aspect;
-		float zn = -Layer0Near;
-		float zf = -Layer0Far;
+		float zn = Layer0Near;
+		float zf = Layer0Far;
 
 		std::vector<glm::vec4> corners;
 		corners.reserve(8);
@@ -123,19 +123,11 @@ public:
 		return result;
 	}
 
-	void Render(Scene* scene, glm::vec3 center, Camera* camera, float aspect)
+	void Render(Scene* scene, glm::vec3 center, Camera* camera, float aspect, glm::vec4 lightDir)
 	{
 		GFX::ApplyPipeline(pipeline);
 
-		
-		/*ubo.proj = glm::ortho(-10.0f, 10.0f, -10.0f, 10.0f, 0.3f, 40.0f);
-		ubo.proj[1][1] *= -1;*/
-		
-		glm::vec4 lightDir = glm::vec4(glm::normalize(glm::vec3(100.463f, -26.725f, 0.0f)), 0.0f);
-
-		
-		// 
-		 // Calculate the new Front vector
+		// Calculate the new Front vector
 		glm::vec3 Front = glm::normalize(lightDir);
 		glm::vec3 WorldUp = glm::vec3(0.0f, 1.0f, 0.0f);
 		if (abs(glm::length(Front + WorldUp) - 0.0f) <= 0.00001f)
@@ -147,13 +139,10 @@ public:
 		glm::vec3 Right = glm::normalize(glm::cross(Front, WorldUp));  // Normalize the vectors, because their length gets closer to 0 the more you look up or down which results in slower movement.
 		glm::vec3 Up = glm::normalize(glm::cross(Right, Front));
 
-		glm::vec3 shadowPos = camera->Position + camera->Front * 5.0f - 10.0f * glm::vec3(lightDir);
-		auto lightView = glm::lookAt(shadowPos, shadowPos + 1.0f * glm::vec3(lightDir), Up);
+		auto lightView = glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(lightDir), Up);
 
 		ShadowMapUniformObject ubo = ComputeShadowMatrix(camera, lightView, aspect, Layer0Near, Layer0Far);
-
 		GFX::UpdateUniformBuffer(uniform, 0, &ubo);
-
 		GFX::BindUniform(uniform, 0);
 
 		for (auto mesh : scene->meshes)

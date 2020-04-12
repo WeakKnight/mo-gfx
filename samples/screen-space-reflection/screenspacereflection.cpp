@@ -831,21 +831,21 @@ void ScreenSpaceReflectionExample::MainLoop()
 			
 			glm::vec4 lightDir = glm::vec4(glm::normalize(glm::vec3(100.463f, -26.725f, 0.0f)), 0.0f);
 
-			glm::vec3 forward = glm::inverse(s_camera->GetViewMatrix()) * glm::vec4(0.0f, 0.0f, -1.0f, 1.0f);
+			// glm::vec3 forward = glm::inverse(s_camera->GetViewMatrix()) * glm::vec4(0.0f, 0.0f, -1.0f, 1.0f);
 
 			// Shadow Map Rendering
-			s_shadowMap->Render(s_scene, target, s_camera, (float)s_width/(float)s_height);
+			s_shadowMap->Render(s_scene, target, s_camera, (float)s_width/(float)s_height, lightDir);
 
 			GFX::NextSubpass();
 
 			UniformBufferObject ubo = {};
 			ubo.view = s_camera->GetViewMatrix();
-			ubo.proj = glm::perspective(glm::radians(45.0f), (float)s_width / (float)s_height, 0.1f, 300.0f);
+			ubo.proj = glm::perspective(glm::radians(s_camera->fov), (float)s_width / (float)s_height, s_camera->near, s_camera->far);
 			ubo.proj[1][1] *= -1;
 
 			GatheringPassUniformData gatherPassUBO = {};
 			gatherPassUBO.view = s_camera->GetViewMatrix();
-			gatherPassUBO.proj = glm::perspective(glm::radians(45.0f), (float)s_width / (float)s_height, 0.1f, 300.0f);
+			gatherPassUBO.proj = glm::perspective(glm::radians(s_camera->fov), (float)s_width / (float)s_height, s_camera->near, s_camera->far);
 			gatherPassUBO.proj[1][1] *= -1;
 			gatherPassUBO.lightDir = lightDir;
 			gatherPassUBO.lightColor = glm::vec4(0.7f, 0.4f, 0.5f, 1.0f);
