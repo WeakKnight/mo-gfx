@@ -90,6 +90,12 @@ void main()
 {       
     vec4 normalRoughness = subpassLoad(samplerNormalRoughness);
 
+    if(inUV.x < 0.5)
+    {
+        outColor = vec4( texture(shadowMap,  vec2((inUV.x) * 2, inUV.y)).rrr, 1.0);
+        return;
+    }
+
     if(length(normalRoughness.xyz) <= 0.0)
     {
         discard;
@@ -130,9 +136,10 @@ void main()
     float shadowFactor = ShadowedFactor(posWS, NDotL);
 
     // outColor = vec4(shadowFactor * albedo + ambient + specular, 1.0);
+
     if(posCS.z > -30.0)
     {
-        outColor = vec4(vec3(0.8,0.3,0.3) * albedo + 0.1 * ambient + specular, 1.0);
+        outColor = vec4(vec3(0.8,0.3,0.3) * shadowFactor * albedo + 0.1 * ambient + specular, 1.0);
     }
     else
     {

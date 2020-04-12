@@ -61,22 +61,20 @@ public:
 		m_height = height;
 	}
 
-	float Layer0Near = 0.3f;
 	float Layer0Far = 30.0f;
 
 	// return proj matrix for shadow map
 	ShadowMapUniformObject ComputeShadowMatrix(Camera* camera, glm::mat4& lightView, float aspect, float near, float far)
 	{
-		glm::vec4 lightDir = glm::vec4(glm::normalize(glm::vec3(100.463f, -26.725f, 0.0f)), 0.0f);
-
 		// Calculate 8 near layer corner In Camera Space
-		constexpr float fov = glm::radians(45.0f);
-		float yn = Layer0Near * tan(fov * 0.5);
-		float yf = Layer0Far * tan(fov * 0.5);
-		float xn = yn * aspect;
-		float xf = yf * aspect;
-		float zn = Layer0Near;
-		float zf = Layer0Far;
+		float VFov = glm::radians(camera->fov);
+		float HFov = glm::radians(aspect * camera->fov);
+		float yn = near * tan(VFov * 0.5);
+		float yf = far * tan(VFov * 0.5);
+		float xn = near * tan(HFov * 0.5);
+		float xf = far * tan(HFov * 0.5);
+		float zn = near;
+		float zf = far;
 
 		std::vector<glm::vec4> corners;
 		corners.reserve(8);
@@ -86,10 +84,10 @@ public:
 		corners.push_back(glm::vec4(xn, -yn, zn, 1.0f));
 		corners.push_back(glm::vec4(-xn, -yn, zn, 1.0f));
 		// far face
-		corners.push_back(glm::vec4(xn, yn, zf, 1.0f));
-		corners.push_back(glm::vec4(-xn, yn, zf, 1.0f));
-		corners.push_back(glm::vec4(xn, -yn, zf, 1.0f));
-		corners.push_back(glm::vec4(-xn, -yn, zf, 1.0f));
+		corners.push_back(glm::vec4(xf, yf, zf, 1.0f));
+		corners.push_back(glm::vec4(-xf, yf, zf, 1.0f));
+		corners.push_back(glm::vec4(xf, -yf, zf, 1.0f));
+		corners.push_back(glm::vec4(-xf, -yf, zf, 1.0f));
 
 		auto camInv = glm::inverse(camera->GetViewMatrix());
 		float minX = INFINITY;
@@ -139,9 +137,9 @@ public:
 		glm::vec3 Right = glm::normalize(glm::cross(Front, WorldUp));  // Normalize the vectors, because their length gets closer to 0 the more you look up or down which results in slower movement.
 		glm::vec3 Up = glm::normalize(glm::cross(Right, Front));
 
-		auto lightView = glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(lightDir), Up);
+		auto lightView = glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), Front, Up);
 
-		ShadowMapUniformObject ubo = ComputeShadowMatrix(camera, lightView, aspect, Layer0Near, Layer0Far);
+		ShadowMapUniformObject ubo = ComputeShadowMatrix(camera, lightView * glm::eulerAngleXYZ(glm::radians(0.0f), glm::radians(0.0f), glm::radians(0.0f)), aspect, camera->near, Layer0Far);
 		GFX::UpdateUniformBuffer(uniform, 0, &ubo);
 		GFX::BindUniform(uniform, 0);
 
