@@ -25,6 +25,15 @@
 #include "shadowmap.h"
 #include "camera.h"
 
+#define ALBEDO_ATTACHMENT_INDEX 1
+#define NORMAL_ATTACHMENT_INDEX 2
+#define HDR_ATTACHMENT_INDEX 3
+#define DEPTH_ATTACHMENT_INDEX 4
+
+#define MRT_PASS_INDEX 0
+#define GATHER_PASS_INDEX 1
+#define PRESENT_PASS_INDEX 2
+
 class ModelUniformBlock
 {
 public:
@@ -65,6 +74,7 @@ const int HEIGHT = 600;
 
 static int s_width = WIDTH;
 static int s_height = HEIGHT;
+static float s_exposure = 1.5f;
 
 static Scene* s_scene = nullptr;
 static ModelUniformBlock* s_modelUniform = nullptr;
@@ -81,9 +91,6 @@ static PipelineObject* s_presentPipelineObject = nullptr;
 static GFX::UniformLayout s_gatherUniformLayout;
 static GFX::Uniform s_gatherUniform;
 
-static GFX::UniformLayout s_presentUniformLayout;
-static GFX::Uniform s_presentUniform;
-
 static GFX::Sampler s_depthSampler;
 static GFX::Sampler s_nearestSampler;
 static GFX::Sampler s_linearSampler;
@@ -94,15 +101,6 @@ static GFX::Image s_irradianceMap;
 static ShadowMap* s_shadowMap;
 
 static Camera* s_camera = nullptr;
-
-#define ALBEDO_ATTACHMENT_INDEX 1
-#define NORMAL_ATTACHMENT_INDEX 2
-#define HDR_ATTACHMENT_INDEX 3
-#define DEPTH_ATTACHMENT_INDEX 4
-
-#define MRT_PASS_INDEX 0
-#define GATHER_PASS_INDEX 1
-#define PRESENT_PASS_INDEX 2
 
 class Skybox
 {
@@ -279,7 +277,80 @@ public:
 	}
 };
 
+struct PresentUniform
+{
+	PresentUniform()
+	{
+		CreateUniformBuffer();
+		CreateUniformLayout();
+		CreateUniform();
+	}
+
+	~PresentUniform()
+	{
+		GFX::DestroyBuffer(uniformBuffer);
+		GFX::DestroyUniform(uniform);
+		GFX::DestroyUniformLayout(uniformLayout);
+	}
+
+	void CreateUniformBuffer()
+	{
+		GFX::BufferDescription bufferDesc = {};
+		bufferDesc.size = sizeof(PresentUniformBufferObject);
+		bufferDesc.storageMode = GFX::BufferStorageMode::Dynamic;
+		bufferDesc.usage = GFX::BufferUsage::UniformBuffer;
+
+		uniformBuffer = GFX::CreateBuffer(bufferDesc);
+	}
+
+	void CreateUniformLayout()
+	{
+		GFX::UniformLayoutDescription uniformLayoutDescription = {};
+		uniformLayoutDescription.AddUniformBinding(0, GFX::UniformType::SampledImage, GFX::ShaderStage::Fragment, 1);
+		uniformLayoutDescription.AddUniformBinding(1, GFX::UniformType::UniformBuffer, GFX::ShaderStage::Fragment, 1);
+
+		uniformLayout = GFX::CreateUniformLayout(uniformLayoutDescription);
+	}
+
+	void CreateUniform()
+	{
+		GFX::UniformDescription uniformDesc = {};
+		uniformDesc.AddSampledAttachmentAttribute(0, s_meshRenderPass, HDR_ATTACHMENT_INDEX, s_nearestSampler);
+		uniformDesc.AddBufferAttribute(1, uniformBuffer, 0, sizeof(PresentUniformBufferObject));
+		uniformDesc.SetUniformLayout(uniformLayout);
+		uniformDesc.SetStorageMode(GFX::UniformStorageMode::Dynamic);
+
+		uniform = GFX::CreateUniform(uniformDesc);
+	}
+
+	void Resize()
+	{
+		GFX::DestroyUniform(uniform);
+		CreateUniform();
+	}
+
+	void UpdateUniform()
+	{
+		ubo.WidthHeightExposureNo = glm::vec4(s_width, s_height, s_exposure, 0.0f);
+		GFX::UpdateUniformBuffer(uniform, 1, &ubo);
+	}
+
+	struct PresentUniformBufferObject
+	{
+		glm::vec4 WidthHeightExposureNo;
+		glm::vec4 Nothing0;
+		glm::vec4 Nothing1;
+		glm::vec4 Nothing2;
+	};
+
+	PresentUniformBufferObject ubo = {};
+	GFX::UniformLayout uniformLayout = {};
+	GFX::Uniform uniform = {};
+	GFX::Buffer uniformBuffer = {};
+};
+
 static Skybox* skybox = nullptr;
+static PresentUniform* presentUniform = nullptr;
 
 // timing
 float deltaTime = 0.0f;	// time between current frame and last frame
@@ -313,12 +384,7 @@ static void framebufferResizeCallback(GLFWwindow* window, int width, int height)
 	gatherUniformDesc.SetStorageMode(GFX::UniformStorageMode::Dynamic);
 	s_gatherUniform = GFX::CreateUniform(gatherUniformDesc);
 
-	GFX::DestroyUniform(s_presentUniform);
-	GFX::UniformDescription presentUniformDesc = {};
-	presentUniformDesc.AddSampledAttachmentAttribute(0, s_meshRenderPass, HDR_ATTACHMENT_INDEX, s_nearestSampler);
-	presentUniformDesc.SetUniformLayout(s_presentUniformLayout);
-	presentUniformDesc.SetStorageMode(GFX::UniformStorageMode::Dynamic);
-	s_presentUniform = GFX::CreateUniform(presentUniformDesc);
+	presentUniform->Resize();
 }
 
 float lastX = s_width / 2.0f;
@@ -663,27 +729,10 @@ void CreateGatheringPipeline()
 
 void CreatePresentPipeline()
 {
-	// Uniform Layout
-	GFX::UniformLayoutDescription uniformLayoutDescription = {};
-	// uniformLayoutDescription.AddUniformBinding(0, GFX::UniformType::InputAttachment, GFX::ShaderStage::Fragment, 1);
-	uniformLayoutDescription.AddUniformBinding(0, GFX::UniformType::SampledImage, GFX::ShaderStage::Fragment, 1);
-
-	s_presentUniformLayout = GFX::CreateUniformLayout(uniformLayoutDescription);
-
-	// Uniform
-	GFX::UniformDescription uniformDesc = {};
-	// HDR attachment 
-	// uniformDesc.AddInputAttachmentAttribute(0, s_meshRenderPass, 4);
-	uniformDesc.AddSampledAttachmentAttribute(0, s_meshRenderPass, HDR_ATTACHMENT_INDEX, s_nearestSampler);
-	uniformDesc.SetUniformLayout(s_presentUniformLayout);
-	uniformDesc.SetStorageMode(GFX::UniformStorageMode::Dynamic);
-
-	s_presentUniform = GFX::CreateUniform(uniformDesc);
-
 	GFX::VertexBindings vertexBindings = {};
 
 	GFX::UniformBindings uniformBindings = {};
-	uniformBindings.AddUniformLayout(s_presentUniformLayout);
+	uniformBindings.AddUniformLayout(presentUniform->uniformLayout);
 
 	s_presentPipelineObject = new PipelineObject();
 	s_presentPipelineObject->Build(s_meshRenderPass, PRESENT_PASS_INDEX, 1, vertexBindings, uniformBindings, "screen-space-reflection/screen_quad.vert", "screen-space-reflection/present_pass.frag", false, GFX::CullFace::None);
@@ -758,6 +807,7 @@ void ScreenSpaceReflectionExample::Init()
 	s_shadowMap = ShadowMap::Create();
 
 	skybox = Skybox::Create();
+	presentUniform = new PresentUniform();
 
 	std::vector<std::string> textureNames;
 	textureNames.reserve(6);
@@ -881,7 +931,8 @@ void ScreenSpaceReflectionExample::MainLoop()
 
 			GFX::NextSubpass();
 			GFX::ApplyPipeline(s_presentPipelineObject->pipeline);
-			GFX::BindUniform(s_presentUniform, 0);
+			presentUniform->UpdateUniform();
+			GFX::BindUniform(presentUniform->uniform, 0);
 			GFX::Draw(3, 1, 0, 0);
 
 			GFX::EndRenderPass();
@@ -913,8 +964,7 @@ void ScreenSpaceReflectionExample::CleanUp()
 	GFX::DestroyUniformLayout(s_gatherUniformLayout);
 	GFX::DestroyUniform(s_gatherUniform);
 
-	GFX::DestroyUniformLayout(s_presentUniformLayout);
-	GFX::DestroyUniform(s_presentUniform);
+	delete presentUniform;
 
 	GFX::DestroySampler(s_depthSampler);
 	GFX::DestroySampler(s_nearestSampler);

@@ -1088,7 +1088,13 @@ namespace GFX
             {
                 if (m_storageMode == BufferStorageMode::Dynamic)
                 {
-                    Map(offset + (s_currentImageIndex * m_size), size);
+                    for (int i = 0; i < s_swapChainImages.size(); i++)
+                    {
+                        Map(offset + (i * m_size), size);
+                        memcpy(m_mappedPtr, data, size);
+                        Unmap();
+                    }
+                    return;
                 }
                 else
                 {

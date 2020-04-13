@@ -93,7 +93,8 @@ public:
 
 		// Calculate split depths based on view camera furstum
 		// Based on method presentd in https://developer.nvidia.com/gpugems/GPUGems3/gpugems3_ch10.html
-		for (uint32_t i = 0; i < SHADOW_MAP_CASCADE_COUNT; i++) {
+		for (uint32_t i = 0; i < SHADOW_MAP_CASCADE_COUNT; i++) 
+		{
 			float p = (i + 1) / static_cast<float>(SHADOW_MAP_CASCADE_COUNT);
 			float log = minZ * std::pow(ratio, p);
 			float uniform = minZ + range * p;
@@ -103,43 +104,67 @@ public:
 
 		// Calculate orthographic projection matrix for each cascade
 		float lastSplitDist = 0.0;
-		for (uint32_t i = 0; i < SHADOW_MAP_CASCADE_COUNT; i++) {
+		for (uint32_t i = 0; i < SHADOW_MAP_CASCADE_COUNT; i++) 
+		{
 			float splitDist = cascadeSplits[i];
+			float splitDepth = (camera->near + splitDist * clipRange) * -1.0f;
 
-			glm::vec3 frustumCorners[8] = {
-				glm::vec3(-1.0f,  1.0f, -1.0f),
-				glm::vec3(1.0f,  1.0f, -1.0f),
-				glm::vec3(1.0f, -1.0f, -1.0f),
-				glm::vec3(-1.0f, -1.0f, -1.0f),
-				glm::vec3(-1.0f,  1.0f,  1.0f),
-				glm::vec3(1.0f,  1.0f,  1.0f),
-				glm::vec3(1.0f, -1.0f,  1.0f),
-				glm::vec3(-1.0f, -1.0f,  1.0f),
+			float near = (camera->near + lastSplitDist * clipRange);
+			float far = (camera->near + splitDist * clipRange);
+			float VerticalFov = glm::radians(camera->fov);
+
+			float yn = near * tanf(VerticalFov * 0.5f);
+			float yf = far * tanf(VerticalFov * 0.5f);
+			float xn = camera->aspect * yn;
+			float xf = camera->aspect * yf;
+			
+			glm::mat4 utilLightViewMatrix = glm::lookAt(glm::vec3(0.0f) - (lightDir), glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+
+			glm::vec3 corners[8] =
+			{
+				glm::vec3(xn,yn,-near),
+				glm::vec3(-xn,yn,-near),
+				glm::vec3(xn,-yn,-near),
+				glm::vec3(-xn,-yn,-near),
+				glm::vec3(xf,yf,-far),
+				glm::vec3(-xf,yf,-far),
+				glm::vec3(xf,-yf,-far),
+				glm::vec3(-xf,-yf,-far)
 			};
 
-			// Project frustum corners into world space
-			glm::mat4 invCam = glm::inverse(camera->GetProjectionMatrix() * camera->GetViewMatrix());
-			for (uint32_t i = 0; i < 8; i++) {
-				glm::vec4 invCorner = invCam * glm::vec4(frustumCorners[i], 1.0f);
-				frustumCorners[i] = invCorner / invCorner.w;
+			float minX = INFINITY;
+			float maxX = -INFINITY;
+			float minY = INFINITY;
+			float maxY = -INFINITY;
+			float minZ = INFINITY;
+			float maxZ = -INFINITY;
+
+			for (int j = 0; j < 8; j++) {
+
+				// Transform the frustum coordinate from view to world space
+				glm::vec4 vW = glm::inverse(camera->GetViewMatrix()) * glm::vec4(corners[j], 1.0f);
+				corners[j] = vW;
+
+				minX = Math::Min(minX, corners[j].x);
+				maxX = Math::Max(maxX, corners[j].x);
+				
+				minY = Math::Min(minY, corners[j].y);
+				maxY = Math::Max(maxY, corners[j].y);
+
+				minZ = Math::Min(minZ, corners[j].z);
+				maxZ = Math::Max(maxZ, corners[j].z);
 			}
 
-			for (uint32_t i = 0; i < 4; i++) {
-				glm::vec3 dist = frustumCorners[i + 4] - frustumCorners[i];
-				frustumCorners[i + 4] = frustumCorners[i] + (dist * splitDist);
-				frustumCorners[i] = frustumCorners[i] + (dist * lastSplitDist);
-			}
-
-			// Get frustum center
 			glm::vec3 frustumCenter = glm::vec3(0.0f);
-			for (uint32_t i = 0; i < 8; i++) {
-				frustumCenter += frustumCorners[i];
+			for (uint32_t j = 0; j < 8; j++)
+			{
+				frustumCenter += corners[j];
 			}
 			frustumCenter /= 8.0f;
 
 			float radius = 0.0f;
-			for (uint32_t i = 0; i < 8; i++) {
-				float distance = glm::length(frustumCorners[i] - frustumCenter);
+			for (uint32_t j = 0; j < 8; j++) {
+				float distance = glm::length(corners[j] - frustumCenter);
 				radius = glm::max(radius, distance);
 			}
 			radius = std::ceil(radius * 16.0f) / 16.0f;
@@ -147,8 +172,8 @@ public:
 			glm::vec3 maxExtents = glm::vec3(radius);
 			glm::vec3 minExtents = -maxExtents;
 
-			glm::mat4 lightViewMatrix = glm::lookAt(frustumCenter - (lightDir * (-minExtents.z)), frustumCenter, glm::vec3(0.0f, 1.0f, 0.0f));
-			glm::mat4 lightOrthoMatrix = glm::ortho(minExtents.x, maxExtents.x, minExtents.y, maxExtents.y, 0.0f, maxExtents.z - minExtents.z);
+			glm::mat4 lightViewMatrix = glm::lookAt(frustumCenter - 3.0f * (lightDir * (-minExtents.z)), frustumCenter, glm::vec3(0.0f, 1.0f, 0.0f));
+			glm::mat4 lightOrthoMatrix = glm::ortho(minExtents.x, maxExtents.x, minExtents.y, maxExtents.y, 0.0f, 6.0f * maxExtents.z);
 			lightOrthoMatrix[1][1] *= -1.0f;
 
 			// Store split distance and matrix in cascade

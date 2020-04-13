@@ -4,6 +4,13 @@ layout (location = 0) in vec2 inUV;
 
 // layout (input_attachment_index = 0, binding = 0) uniform subpassInput samplerHdr;
 layout (binding = 0) uniform sampler2D samplerHdr;
+layout (binding = 1) uniform PresentUniformBufferObject
+{
+    vec4 WidthHeightExposureNo;
+    vec4 Nothing0;
+    vec4 Nothing1;
+    vec4 Nothing2;
+} ubo;
 
 layout (location = 0) out vec4 outColor;
 
@@ -64,5 +71,5 @@ void main()
     vign = pow(vign, power);
     mappedColor *= vign;
 
-    outColor = vec4(mappedColor + ScreenSpaceDither(inUV * vec2(800.0, 600.0)), 1.0);
+    outColor = vec4(mappedColor + ScreenSpaceDither(inUV * vec2(ubo.WidthHeightExposureNo.x, ubo.WidthHeightExposureNo.y)), 1.0);
 }

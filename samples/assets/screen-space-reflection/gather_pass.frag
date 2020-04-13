@@ -66,7 +66,7 @@ const mat4 biasMat = mat4(
 float textureProj(vec4 shadowCoord, vec2 offset, uint cascadeIndex)
 {
 	float shadow = 1.0;
-	float bias = 0.005;
+	float bias = 0.0003;
 
 	if (shadowCoord.z > -1.0 && shadowCoord.z < 1.0) 
     {
@@ -91,6 +91,25 @@ float textureProj(vec4 shadowCoord, vec2 offset, uint cascadeIndex)
 	}
 
 	return shadow;
+}
+
+float filterPCF(vec4 sc, uint cascadeIndex)
+{
+	float scale = 0.75;
+	float dx = scale * 1.0 / 4096.0;
+	float dy = scale * 1.0 / 4096.0;
+
+	float shadowFactor = 0.0;
+	int count = 0;
+	int range = 1;
+	
+	for (int x = -range; x <= range; x++) {
+		for (int y = -range; y <= range; y++) {
+			shadowFactor += textureProj(sc, vec2(dx*x, dy*y), cascadeIndex);
+			count++;
+		}
+	}
+	return shadowFactor / count;
 }
 
 vec3 WorldPosFromDepth(float depth, mat4 projInv, mat4 viewInv) {
@@ -228,22 +247,23 @@ void main()
         shadowCoord = (biasMat * subo2.proj * subo2.view) * vec4(posWS, 1.0);	
     }
 
-    float shadowFactor = textureProj(shadowCoord / shadowCoord.w, vec2(0.0), usedCascade);
+    float shadowFactor = filterPCF(shadowCoord / shadowCoord.w, usedCascade);
+    // float shadowFactor = textureProj(shadowCoord / shadowCoord.w, vec2(0.0), usedCascade);
     // float shadowFactor = ShadowedFactor(posWS, NDotL, usedCascade);
     vec3 blendColor = vec3(1.0, 1.0, 1.0);
     
-    if(usedCascade == 0)
-    {
-        blendColor = vec3(0.8, 0.3, 0.3);
-    }
-    else if(usedCascade == 1)
-    {
-        blendColor = vec3(0.3, 0.8, 0.3);
-    }
-    else if(usedCascade == 2)
-    {
-        blendColor = vec3(0.3, 0.3, 0.8);
-    }
+    // if(usedCascade == 0)
+    // {
+    //     blendColor = vec3(0.8, 0.3, 0.3);
+    // }
+    // else if(usedCascade == 1)
+    // {
+    //     blendColor = vec3(0.3, 0.8, 0.3);
+    // }
+    // else if(usedCascade == 2)
+    // {
+    //     blendColor = vec3(0.3, 0.3, 0.8);
+    // }
 
     outColor = vec4(blendColor * (shadowFactor * albedo + ambient + specular), 1.0);
 
