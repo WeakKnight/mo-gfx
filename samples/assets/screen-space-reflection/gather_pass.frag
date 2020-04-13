@@ -56,11 +56,41 @@ layout(binding = 0, set = 3) uniform ShadowUniformBufferObject2
 layout (location = 0) out vec4 outColor;
 
 const float PI = 3.1415927;
+const mat4 biasMat = mat4( 
+	0.5, 0.0, 0.0, 0.0,
+	0.0, 0.5, 0.0, 0.0,
+	0.0, 0.0, 1.0, 0.0,
+	0.5, 0.5, 0.0, 1.0 
+);
 
-float LinearizeDepth(float depth, float n, float f)
+float textureProj(vec4 shadowCoord, vec2 offset, uint cascadeIndex)
 {
-  float z = depth;
-  return (2.0 * n) / (f + n - z * (f - n));	
+	float shadow = 1.0;
+	float bias = 0.005;
+
+	if (shadowCoord.z > -1.0 && shadowCoord.z < 1.0) 
+    {
+        float dist = 0.0;
+        if(cascadeIndex == 0)
+        {
+            dist = texture(shadowMap0, (shadowCoord.st + offset)).r;
+        }
+        else if(cascadeIndex == 1)
+        {
+            dist = texture(shadowMap1, (shadowCoord.st + offset)).r;
+        }
+        else if(cascadeIndex == 2)
+        {
+            dist = texture(shadowMap2, (shadowCoord.st + offset)).r;
+        }
+
+        if (shadowCoord.w > 0 && dist < shadowCoord.z - bias) 
+        {
+            shadow = 0.0;
+        }
+	}
+
+	return shadow;
 }
 
 vec3 WorldPosFromDepth(float depth, mat4 projInv, mat4 viewInv) {
@@ -183,21 +213,37 @@ void main()
         albedo = vec3(0.0, 0.0, 0.0);
     }
 
-    float shadowFactor = ShadowedFactor(posWS, NDotL, usedCascade);
+
+    vec4 shadowCoord = vec4(0.0);
+    if(usedCascade == 0)
+    {
+        shadowCoord = (biasMat * subo0.proj * subo0.view) * vec4(posWS, 1.0);	
+    }
+    else if(usedCascade == 1)
+    {
+        shadowCoord = (biasMat * subo1.proj * subo1.view) * vec4(posWS, 1.0);	
+    }
+    else if(usedCascade == 2)
+    {
+        shadowCoord = (biasMat * subo2.proj * subo2.view) * vec4(posWS, 1.0);	
+    }
+
+    float shadowFactor = textureProj(shadowCoord / shadowCoord.w, vec2(0.0), usedCascade);
+    // float shadowFactor = ShadowedFactor(posWS, NDotL, usedCascade);
     vec3 blendColor = vec3(1.0, 1.0, 1.0);
     
-    // if(usedCascade == 0)
-    // {
-    //     blendColor = vec3(0.8, 0.3, 0.3);
-    // }
-    // else if(usedCascade == 1)
-    // {
-    //     blendColor = vec3(0.3, 0.8, 0.3);
-    // }
-    // else if(usedCascade == 2)
-    // {
-    //     blendColor = vec3(0.3, 0.3, 0.8);
-    // }
+    if(usedCascade == 0)
+    {
+        blendColor = vec3(0.8, 0.3, 0.3);
+    }
+    else if(usedCascade == 1)
+    {
+        blendColor = vec3(0.3, 0.8, 0.3);
+    }
+    else if(usedCascade == 2)
+    {
+        blendColor = vec3(0.3, 0.3, 0.8);
+    }
 
     outColor = vec4(blendColor * (shadowFactor * albedo + ambient + specular), 1.0);
 

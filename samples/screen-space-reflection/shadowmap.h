@@ -44,7 +44,7 @@ public:
 	};
 
 	std::array<Cascade, SHADOW_MAP_CASCADE_COUNT> cascades = {};
-	float cascadeSplitLambda = 0.95f;
+	float cascadeSplitLambda = 0.75f;
 
 	class ShadowMapUniformObject
 	{
@@ -147,9 +147,10 @@ public:
 			glm::vec3 maxExtents = glm::vec3(radius);
 			glm::vec3 minExtents = -maxExtents;
 
-			glm::mat4 lightViewMatrix = glm::lookAt(frustumCenter - lightDir * -minExtents.z, frustumCenter, glm::vec3(0.0f, 1.0f, 0.0f));
+			glm::mat4 lightViewMatrix = glm::lookAt(frustumCenter - (lightDir * (-minExtents.z)), frustumCenter, glm::vec3(0.0f, 1.0f, 0.0f));
 			glm::mat4 lightOrthoMatrix = glm::ortho(minExtents.x, maxExtents.x, minExtents.y, maxExtents.y, 0.0f, maxExtents.z - minExtents.z);
 			lightOrthoMatrix[1][1] *= -1.0f;
+
 			// Store split distance and matrix in cascade
 			cascades[i].splitDepth = (camera->near + splitDist * clipRange) * -1.0f;
 			cascades[i].view = lightViewMatrix;
