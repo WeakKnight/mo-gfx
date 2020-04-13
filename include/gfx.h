@@ -395,15 +395,20 @@ namespace GFX
         ColorAttachmentOutput,
         FragmentShader,
         VertexShader,
+        LateFragmentTests,
+        EarlyFragmentTests,
         All
     };
 
     enum class Access
     {
         ColorAttachmentWrite,
+        DepthStencilAttachmentWrite,
         ShaderRead,
         InputAttachmentRead,
     };
+
+    constexpr auto ExternalSubpass = (~0U);
 
     struct DependencyDescription
     {

@@ -255,7 +255,7 @@ namespace GFX
                 }
                 else if (attachmentDesc.type == AttachmentType::DepthStencil)
                 {
-                    attachmentDescs[i].setFinalLayout(vk::ImageLayout::eDepthStencilAttachmentOptimal);
+                    attachmentDescs[i].setFinalLayout(vk::ImageLayout::eShaderReadOnlyOptimal);
                     m_attachmentDic[i] = CreateAttachment(attachmentDesc.width, attachmentDesc.height, MapFormatForVulkan(attachmentDesc.format), vk::ImageUsageFlagBits::eDepthStencilAttachment);
                 }
                 else if (attachmentDesc.type == AttachmentType::Color)
@@ -509,6 +509,8 @@ namespace GFX
                 return vk::AccessFlagBits::eShaderRead;
             case Access::InputAttachmentRead:
                 return vk::AccessFlagBits::eInputAttachmentRead;
+            case Access::DepthStencilAttachmentWrite:
+                return vk::AccessFlagBits::eDepthStencilAttachmentWrite;
             default:
                 assert(false);
                 return vk::AccessFlagBits::eShaderRead;
@@ -525,6 +527,10 @@ namespace GFX
                 return vk::PipelineStageFlagBits::eFragmentShader;
             case PipelineStage::VertexShader:
                 return vk::PipelineStageFlagBits::eVertexShader;
+            case PipelineStage::EarlyFragmentTests:
+                return vk::PipelineStageFlagBits::eEarlyFragmentTests;
+            case PipelineStage::LateFragmentTests:
+                return vk::PipelineStageFlagBits::eLateFragmentTests;
             case PipelineStage::All:
                 return vk::PipelineStageFlagBits::eAllCommands;
             default:

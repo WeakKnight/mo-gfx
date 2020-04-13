@@ -14,6 +14,7 @@
 #include "camera.h"
 
 #define SHADOW_MAP_CASCADE_COUNT 3
+#define SHADOW_MAP_SIZE 4096
 
 class ShadowMap
 {
@@ -32,6 +33,7 @@ public:
 		GFX::DestroyBuffer(uniformBuffer1);
 		GFX::DestroyUniform(uniform2);
 		GFX::DestroyBuffer(uniformBuffer2);
+		GFX::DestroyRenderPass(renderPass);
 	}
 
 	struct Cascade
@@ -42,7 +44,7 @@ public:
 	};
 
 	std::array<Cascade, SHADOW_MAP_CASCADE_COUNT> cascades = {};
-	float cascadeSplitLambda = 0.9f;
+	float cascadeSplitLambda = 0.95f;
 
 	class ShadowMapUniformObject
 	{
@@ -63,21 +65,15 @@ public:
 		glm::vec2 uv;
 	};
 
-	static ShadowMap* Create(GFX::RenderPass renderPass, uint32_t width, uint32_t height)
+	static ShadowMap* Create()
 	{
 		auto result = new ShadowMap();
 
-		result->Resize(width, height);
+		result->CreateRenderPass();
 		result->CreateShader();
-		result->CreatePipeline(renderPass);
+		result->CreatePipeline();
 
 		return result;
-	}
-
-	void Resize(uint32_t width, uint32_t height)
-	{
-		m_width = width;
-		m_height = height;
 	}
 
 	// return proj matrix for shadow map
@@ -146,7 +142,7 @@ public:
 				float distance = glm::length(frustumCorners[i] - frustumCenter);
 				radius = glm::max(radius, distance);
 			}
-			radius = 2.0f * std::ceil(radius * 16.0f) / 16.0f;
+			radius = std::ceil(radius * 16.0f) / 16.0f;
 
 			glm::vec3 maxExtents = glm::vec3(radius);
 			glm::vec3 minExtents = -maxExtents;
@@ -176,8 +172,13 @@ public:
 		ubo2.splitPoints = glm::vec4(cascades[0].splitDepth, cascades[1].splitDepth, cascades[2].splitDepth, 2);
 	}
 
-	void Render(Scene* scene, glm::vec3 center, Camera* camera, float aspect, glm::vec4 lightDir)
+	void Render(Scene* scene, glm::vec3 center, Camera* camera, glm::vec4 lightDir)
 	{
+		GFX::BeginRenderPass(renderPass, 0, 0, SHADOW_MAP_SIZE, SHADOW_MAP_SIZE);
+
+		GFX::SetViewport(0, 0, SHADOW_MAP_SIZE, SHADOW_MAP_SIZE);
+		GFX::SetScissor(0, 0, SHADOW_MAP_SIZE, SHADOW_MAP_SIZE);
+
 		GFX::ApplyPipeline(pipeline0);
 
 		ComputeShadowMatrix(camera, glm::vec3(lightDir));
@@ -216,6 +217,8 @@ public:
 			GFX::BindIndexBuffer(mesh->indexBuffer, 0, GFX::IndexType::UInt32);
 			GFX::DrawIndexed(mesh->indices.size(), 1, 0);
 		}
+
+		GFX::EndRenderPass();
 	}
 
 	ShadowMapUniformObject ubo0 = {};
@@ -238,6 +241,8 @@ public:
 	GFX::Shader vertShader = {};
 	GFX::Shader fragShader = {};
 
+	GFX::RenderPass renderPass = {};
+
 	uint32_t m_width = 0;
 	uint32_t m_height = 0;
 
@@ -259,7 +264,7 @@ private:
 		fragShader = GFX::CreateShader(fragShaderDesc);
 	}
 
-	void CreatePipeline(GFX::RenderPass renderPass)
+	void CreatePipeline()
 	{
 		GFX::BufferDescription uniformBufferDesc = {};
 		uniformBufferDesc.size = sizeof(ShadowMapUniformObject);
@@ -325,6 +330,117 @@ private:
 		pipeline1 = GFX::CreatePipeline(pipelineDesc);
 		pipelineDesc.subpass = 2;
 		pipeline2 = GFX::CreatePipeline(pipelineDesc);
+	}
+
+	void CreateRenderPass()
+	{
+		GFX::RenderPassDescription renderPassDescription = {};
+		renderPassDescription.width = SHADOW_MAP_SIZE;
+		renderPassDescription.height = SHADOW_MAP_SIZE;
+		
+		// Index 0 Shadowmap Depth SHADOWMAP_DEPTH_ATTACHMENT_INDEX
+		GFX::AttachmentDescription shadowMapDepthAttachment0 = {};
+		shadowMapDepthAttachment0.width = SHADOW_MAP_SIZE;
+		shadowMapDepthAttachment0.height = SHADOW_MAP_SIZE;
+		shadowMapDepthAttachment0.format = GFX::Format::DEPTH;
+		shadowMapDepthAttachment0.type = GFX::AttachmentType::DepthStencil;
+		shadowMapDepthAttachment0.loadAction = GFX::AttachmentLoadAction::Clear;
+		shadowMapDepthAttachment0.storeAction = GFX::AttachmentStoreAction::Store;
+
+		GFX::ClearValue shadowMapDepthClearColor0 = {};
+		shadowMapDepthClearColor0.SetDepth(1.0f);
+		shadowMapDepthAttachment0.clearValue = shadowMapDepthClearColor0;
+
+		// Index 1 Shadowmap Depth SHADOWMAP_DEPTH_ATTACHMENT_INDEX
+		GFX::AttachmentDescription shadowMapDepthAttachment1 = {};
+		shadowMapDepthAttachment1.width = SHADOW_MAP_SIZE;
+		shadowMapDepthAttachment1.height = SHADOW_MAP_SIZE;
+		shadowMapDepthAttachment1.format = GFX::Format::DEPTH;
+		shadowMapDepthAttachment1.type = GFX::AttachmentType::DepthStencil;
+		shadowMapDepthAttachment1.loadAction = GFX::AttachmentLoadAction::Clear;
+		shadowMapDepthAttachment1.storeAction = GFX::AttachmentStoreAction::Store;
+
+		GFX::ClearValue shadowMapDepthClearColor1 = {};
+		shadowMapDepthClearColor1.SetDepth(1.0f);
+		shadowMapDepthAttachment1.clearValue = shadowMapDepthClearColor1;
+
+		// Index 2 Shadowmap Depth SHADOWMAP_DEPTH_ATTACHMENT_INDEX
+		GFX::AttachmentDescription shadowMapDepthAttachment2 = {};
+		shadowMapDepthAttachment2.width = SHADOW_MAP_SIZE;
+		shadowMapDepthAttachment2.height = SHADOW_MAP_SIZE;
+		shadowMapDepthAttachment2.format = GFX::Format::DEPTH;
+		shadowMapDepthAttachment2.type = GFX::AttachmentType::DepthStencil;
+		shadowMapDepthAttachment2.loadAction = GFX::AttachmentLoadAction::Clear;
+		shadowMapDepthAttachment2.storeAction = GFX::AttachmentStoreAction::Store;
+
+		GFX::ClearValue shadowMapDepthClearColor2 = {};
+		shadowMapDepthClearColor2.SetDepth(1.0f);
+		shadowMapDepthAttachment2.clearValue = shadowMapDepthClearColor2;
+
+		// Subpass 0, Shadowmap Pass
+		GFX::SubPassDescription subpassShadowMap0 = {};
+		//subpassShadowMap0.colorAttachments.push_back(0);
+		subpassShadowMap0.SetDepthStencilAttachment(0);
+		subpassShadowMap0.pipelineType = GFX::PipelineType::Graphics;
+
+		// Subpass 1, Shadowmap Pass
+		GFX::SubPassDescription subpassShadowMap1 = {};
+		//subpassShadowMap1.colorAttachments.push_back(0);
+		subpassShadowMap1.SetDepthStencilAttachment(1);
+		subpassShadowMap1.pipelineType = GFX::PipelineType::Graphics;
+
+		// Subpass 2, Shadowmap Pass
+		GFX::SubPassDescription subpassShadowMap2 = {};
+		//subpassShadowMap2.colorAttachments.push_back(0);
+		subpassShadowMap2.SetDepthStencilAttachment(2);
+		subpassShadowMap2.pipelineType = GFX::PipelineType::Graphics;
+
+		GFX::DependencyDescription dependencyDesc0 = {};
+		dependencyDesc0.srcSubpass = GFX::ExternalSubpass;
+		dependencyDesc0.dstSubpass = 0;
+		dependencyDesc0.srcStage = GFX::PipelineStage::EarlyFragmentTests;
+		dependencyDesc0.dstStage = GFX::PipelineStage::FragmentShader;
+		dependencyDesc0.srcAccess = GFX::Access::ColorAttachmentWrite;
+		dependencyDesc0.dstAccess = GFX::Access::ShaderRead;
+
+		GFX::DependencyDescription dependencyDesc1 = {};
+		dependencyDesc1.srcSubpass = 0;
+		dependencyDesc1.dstSubpass = 1;
+		dependencyDesc1.srcStage = GFX::PipelineStage::LateFragmentTests;
+		dependencyDesc1.dstStage = GFX::PipelineStage::FragmentShader;
+		dependencyDesc1.srcAccess = GFX::Access::DepthStencilAttachmentWrite;
+		dependencyDesc1.dstAccess = GFX::Access::ShaderRead;
+
+		GFX::DependencyDescription dependencyDesc2 = {};
+		dependencyDesc1.srcSubpass = 1;
+		dependencyDesc1.dstSubpass = 2;
+		dependencyDesc1.srcStage = GFX::PipelineStage::LateFragmentTests;
+		dependencyDesc1.dstStage = GFX::PipelineStage::FragmentShader;
+		dependencyDesc1.srcAccess = GFX::Access::DepthStencilAttachmentWrite;
+		dependencyDesc1.dstAccess = GFX::Access::ShaderRead;
+
+		GFX::DependencyDescription dependencyDesc3 = {};
+		dependencyDesc1.srcSubpass = 2;
+		dependencyDesc1.dstSubpass = GFX::ExternalSubpass;
+		dependencyDesc1.srcStage = GFX::PipelineStage::LateFragmentTests;
+		dependencyDesc1.dstStage = GFX::PipelineStage::FragmentShader;
+		dependencyDesc1.srcAccess = GFX::Access::DepthStencilAttachmentWrite;
+		dependencyDesc1.dstAccess = GFX::Access::ShaderRead;
+
+		renderPassDescription.attachments.push_back(shadowMapDepthAttachment0);
+		renderPassDescription.attachments.push_back(shadowMapDepthAttachment1);
+		renderPassDescription.attachments.push_back(shadowMapDepthAttachment2);
+
+		//renderPassDescription.dependencies.push_back(dependencyDesc0);
+		//renderPassDescription.dependencies.push_back(dependencyDesc1);
+		//renderPassDescription.dependencies.push_back(dependencyDesc2);
+		//renderPassDescription.dependencies.push_back(dependencyDesc3);
+
+		renderPassDescription.subpasses.push_back(subpassShadowMap0);
+		renderPassDescription.subpasses.push_back(subpassShadowMap1);
+		renderPassDescription.subpasses.push_back(subpassShadowMap2);
+
+		renderPass = GFX::CreateRenderPass(renderPassDescription);
 	}
 
 	ShadowMap()

@@ -132,7 +132,7 @@ void main()
 
     // if(inUV.x < 0.5)
     // {
-    //     outColor = vec4( texture(shadowMap,  vec2((inUV.x) * 2, inUV.y)).rrr, 1.0);
+    //     outColor = vec4( texture(shadowMap0,  vec2((inUV.x) * 2, inUV.y)).rrr, 1.0);
     //     return;
     // }
 
