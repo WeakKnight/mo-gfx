@@ -201,6 +201,7 @@ namespace GFX
     vk::BorderColor MapBorderColorForVulkan(const BorderColor& borderColor);
     vk::SampleCountFlagBits MapSampleCountForVulkan(const ImageSampleCount& sampleCount);
     vk::Format MapFormatForVulkan(const Format& format);
+    vk::ImageLayout MapImageLayoutForVulkan(const ImageLayout& layout);
 
     uint32_t FindMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties);
     vk::Format FindSupportedFormat(const std::vector<vk::Format>& candidates, vk::ImageTiling tilling, vk::FormatFeatureFlags features);
@@ -226,6 +227,7 @@ namespace GFX
         vk::DeviceMemory m_memory;
         vk::ImageView m_imageView;
         vk::Image m_image;
+        vk::ImageLayout m_finalLayout;
     };
 
     struct RenderPassResource
@@ -246,27 +248,31 @@ namespace GFX
                 attachmentDescs[i].setStoreOp(MapStoreOpForVulkan(attachmentDesc.storeAction));
                 attachmentDescs[i].setStencilLoadOp(MapLoadOpForVulkan(attachmentDesc.stencilLoadAction));
                 attachmentDescs[i].setStencilStoreOp(MapStoreOpForVulkan(attachmentDesc.stencilStoreAction));
-                attachmentDescs[i].setInitialLayout(vk::ImageLayout::eUndefined);
-                
+
+                auto initialLayout = MapImageLayoutForVulkan(attachmentDesc.initialLayout);
+                attachmentDescs[i].setInitialLayout(initialLayout);
+
+                auto finalLayout = MapImageLayoutForVulkan(attachmentDesc.finalLayout);
+                attachmentDescs[i].setFinalLayout(finalLayout);
+
                 if (attachmentDesc.type == AttachmentType::Present)
                 {
-                    attachmentDescs[i].setFinalLayout(vk::ImageLayout::ePresentSrcKHR);
                     m_attachmentDic[i] = GetSwapChainAttachment(s_currentImageIndex);
                 }
                 else if (attachmentDesc.type == AttachmentType::DepthStencil)
                 {
-                    attachmentDescs[i].setFinalLayout(vk::ImageLayout::eShaderReadOnlyOptimal);
                     m_attachmentDic[i] = CreateAttachment(attachmentDesc.width, attachmentDesc.height, MapFormatForVulkan(attachmentDesc.format), vk::ImageUsageFlagBits::eDepthStencilAttachment);
                 }
                 else if (attachmentDesc.type == AttachmentType::Color)
                 {
-                    attachmentDescs[i].setFinalLayout(vk::ImageLayout::eShaderReadOnlyOptimal);
                     m_attachmentDic[i] = CreateAttachment(attachmentDesc.width, attachmentDesc.height, MapFormatForVulkan(attachmentDesc.format), vk::ImageUsageFlagBits::eColorAttachment);
                 }
                 else
                 {
                     assert(false);
                 }
+
+                m_attachmentDic[i].m_finalLayout = finalLayout;
 
                 m_clearValues.push_back(MapClearValueForVulkan(attachmentDesc.clearValue));
             }
@@ -284,6 +290,11 @@ namespace GFX
                 for (auto attachmentIndex : subpassDesc.colorAttachments)
                 {
                     vk::AttachmentReference colorRef = { attachmentIndex, vk::ImageLayout::eColorAttachmentOptimal };
+                    if (m_attachmentDic[attachmentIndex].m_finalLayout == vk::ImageLayout::eGeneral)
+                    {
+                        colorRef = { attachmentIndex, vk::ImageLayout::eGeneral };
+                    }
+                   
                     colorRefsVector[i].push_back(colorRef);
                 }
 
@@ -295,6 +306,10 @@ namespace GFX
                 for (auto inputIndex : subpassDesc.inputAttachments)
                 {
                     vk::AttachmentReference inputRef = { inputIndex, vk::ImageLayout::eShaderReadOnlyOptimal };
+                    if (m_attachmentDic[inputIndex].m_finalLayout == vk::ImageLayout::eGeneral)
+                    {
+                        inputRef = { inputIndex, vk::ImageLayout::eGeneral };
+                    }
                     inputRefsVector[i].push_back(inputRef);
                 }
 
@@ -327,7 +342,7 @@ namespace GFX
                 dependencies[i].setSrcAccessMask(MapAcessForVulkan(dependencyDesc.srcAccess));
                 dependencies[i].setDstAccessMask(MapAcessForVulkan(dependencyDesc.dstAccess));
 
-                dependencies[i].setDependencyFlags(vk::DependencyFlagBits::eByRegion);
+                dependencies[i].setDependencyFlags(vk::DependencyFlagBits::eDeviceGroup);
             }
 
             vk::RenderPassCreateInfo renderPassCreateInfo = {};
@@ -461,6 +476,7 @@ namespace GFX
             result.m_format = oldAttachment.m_format;
             result.m_usage = oldAttachment.m_usage;
             result.isSwapChain = oldAttachment.isSwapChain;
+            result.m_finalLayout = oldAttachment.m_finalLayout;
 
             if (!result.isSwapChain)
             {
@@ -1511,6 +1527,8 @@ namespace GFX
                     auto attribute = desc.m_sampledAttachmentAttributes[j];
                     RenderPassResource* renderPassResource = s_renderPassHandlePool.FetchResource(attribute.renderPass.id);
 
+                    //
+
                     vk::ImageView imageView = {};
                     if (renderPassResource->m_attachmentDic[attribute.attachmentIndex].isSwapChain)
                     {
@@ -1518,13 +1536,23 @@ namespace GFX
                     }
                     else
                     {
-                        imageView = renderPassResource->m_attachmentDic[attribute.attachmentIndex].m_imageView;
+                        auto attachment = renderPassResource->m_attachmentDic[attribute.attachmentIndex];
+                        imageView = attachment.m_imageView;
                     }
 
                     SamplerResource* samplerResource = s_samplerHandlePool.FetchResource(attribute.sampler.id);
 
                     vk::DescriptorImageInfo imageInfo = {};
-                    imageInfo.setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal);
+
+                    auto attachment = renderPassResource->m_attachmentDic[attribute.attachmentIndex];
+                    if (attachment.m_finalLayout == vk::ImageLayout::eGeneral)
+                    {
+                        imageInfo.setImageLayout(vk::ImageLayout::eGeneral);
+                    }
+                    else
+                    {
+                        imageInfo.setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal);
+                    }
                     imageInfo.setSampler(samplerResource->m_sampler);
                     imageInfo.setImageView(imageView);
 
@@ -1808,6 +1836,13 @@ namespace GFX
         TransitionImageLayout(imageResource->m_image, imageResource->m_format, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal, imageResource->m_layerCount);
         CopyBufferToImage(bufferResource->m_buffer, imageResource->m_image, imageResource->m_width, imageResource->m_height, imageResource->m_layerCount);
         TransitionImageLayout(imageResource->m_image, imageResource->m_format, vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal, imageResource->m_layerCount);
+    }
+
+    void AttachmentLayoutTransition(RenderPass renderPass, uint32_t attachmentIndex, ImageLayout oldLayout, ImageLayout newLayout)
+    {
+        RenderPassResource* renderPassResource = s_renderPassHandlePool.FetchResource(renderPass.id);
+        auto attachment = renderPassResource->m_attachmentDic[attachmentIndex];
+        TransitionImageLayout(attachment.m_image, attachment.m_format, MapImageLayoutForVulkan(oldLayout), MapImageLayoutForVulkan(newLayout), 1);
     }
 
     void BindUniform(Uniform uniform, uint32_t set)
@@ -2713,6 +2748,25 @@ namespace GFX
         }
     }
 
+    vk::ImageLayout MapImageLayoutForVulkan(const ImageLayout& layout)
+    {
+        switch (layout)
+        {
+        case ImageLayout::FragmentShaderRead:
+            return vk::ImageLayout::eShaderReadOnlyOptimal;
+        case ImageLayout::ColorAttachment:
+            return vk::ImageLayout::eColorAttachmentOptimal;
+        case ImageLayout::General:
+            return vk::ImageLayout::eGeneral;
+        case ImageLayout::DepthStencilAttachment:
+            return vk::ImageLayout::eDepthStencilAttachmentOptimal;
+        case ImageLayout::Undefined:
+            return vk::ImageLayout::eUndefined;
+        case ImageLayout::Present:
+            return vk::ImageLayout::ePresentSrcKHR;
+        }
+    }
+
     uint32_t FindMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties)
     {
         for (uint32_t i = 0; i < s_physicalDeviceMemoryProperties.memoryTypeCount; i++) {
@@ -2827,6 +2881,22 @@ namespace GFX
 
             sourceStage = vk::PipelineStageFlagBits::eTransfer;
             destinationStage = vk::PipelineStageFlagBits::eFragmentShader;
+        }
+        else if (oldLayout == vk::ImageLayout::eColorAttachmentOptimal && newLayout == vk::ImageLayout::eShaderReadOnlyOptimal)
+        {
+            barrier.setSrcAccessMask(vk::AccessFlagBits::eColorAttachmentWrite);
+            barrier.setDstAccessMask(vk::AccessFlagBits::eShaderRead);
+
+            sourceStage = vk::PipelineStageFlagBits::eColorAttachmentOutput;
+            destinationStage = vk::PipelineStageFlagBits::eFragmentShader;
+        }
+        else if (oldLayout == vk::ImageLayout::eShaderReadOnlyOptimal && newLayout == vk::ImageLayout::eColorAttachmentOptimal)
+        {
+            barrier.setSrcAccessMask({});
+            barrier.setDstAccessMask(vk::AccessFlagBits::eColorAttachmentWrite);
+
+            sourceStage = vk::PipelineStageFlagBits::eFragmentShader;
+            destinationStage = vk::PipelineStageFlagBits::eColorAttachmentOutput;
         }
         else if (oldLayout == vk::ImageLayout::eUndefined && newLayout == vk::ImageLayout::eDepthStencilAttachmentOptimal)
         {
@@ -2981,7 +3051,7 @@ namespace GFX
             }
         }
 
-        return availableFormats[1];
+        return availableFormats[0];
     }
 
     vk::PresentModeKHR ChoosePresentMode(const std::vector<vk::PresentModeKHR>& availablePresentModes)

@@ -2,9 +2,10 @@
 
 layout (location = 0) in vec2 inUV;
 
-// layout (input_attachment_index = 0, binding = 0) uniform subpassInput samplerHdr;
 layout (binding = 0) uniform sampler2D samplerHdr;
-layout (binding = 1) uniform PresentUniformBufferObject
+layout (binding = 1) uniform sampler2D samplerSSRComposite;
+
+layout (binding = 2) uniform PresentUniformBufferObject
 {
     vec4 WidthHeightExposureNo;
     vec4 Nothing0;
@@ -51,7 +52,7 @@ void main()
     const float exposure = 1.0;
 
     // vec3 hdrColor = subpassLoad(samplerHdr).rgb;
-    vec3 hdrColor = texture(samplerHdr, inUV).rgb;
+    vec3 hdrColor = texture(samplerHdr, inUV).rgb + texture(samplerSSRComposite, inUV).rgb;
 
     // vec3 mappedColor = vec3(1.0) - exp(-hdrColor * exposure);
     //  // Gamma Correction

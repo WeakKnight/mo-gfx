@@ -372,6 +372,8 @@ private:
 		shadowMapDepthAttachment0.type = GFX::AttachmentType::DepthStencil;
 		shadowMapDepthAttachment0.loadAction = GFX::AttachmentLoadAction::Clear;
 		shadowMapDepthAttachment0.storeAction = GFX::AttachmentStoreAction::Store;
+		shadowMapDepthAttachment0.initialLayout = GFX::ImageLayout::Undefined;
+		shadowMapDepthAttachment0.finalLayout = GFX::ImageLayout::FragmentShaderRead;
 
 		GFX::ClearValue shadowMapDepthClearColor0 = {};
 		shadowMapDepthClearColor0.SetDepth(1.0f);
@@ -385,6 +387,8 @@ private:
 		shadowMapDepthAttachment1.type = GFX::AttachmentType::DepthStencil;
 		shadowMapDepthAttachment1.loadAction = GFX::AttachmentLoadAction::Clear;
 		shadowMapDepthAttachment1.storeAction = GFX::AttachmentStoreAction::Store;
+		shadowMapDepthAttachment1.initialLayout = GFX::ImageLayout::Undefined;
+		shadowMapDepthAttachment1.finalLayout = GFX::ImageLayout::FragmentShaderRead;
 
 		GFX::ClearValue shadowMapDepthClearColor1 = {};
 		shadowMapDepthClearColor1.SetDepth(1.0f);
@@ -398,6 +402,8 @@ private:
 		shadowMapDepthAttachment2.type = GFX::AttachmentType::DepthStencil;
 		shadowMapDepthAttachment2.loadAction = GFX::AttachmentLoadAction::Clear;
 		shadowMapDepthAttachment2.storeAction = GFX::AttachmentStoreAction::Store;
+		shadowMapDepthAttachment2.initialLayout = GFX::ImageLayout::Undefined;
+		shadowMapDepthAttachment2.finalLayout = GFX::ImageLayout::FragmentShaderRead;
 
 		GFX::ClearValue shadowMapDepthClearColor2 = {};
 		shadowMapDepthClearColor2.SetDepth(1.0f);

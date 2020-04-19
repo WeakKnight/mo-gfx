@@ -3,7 +3,7 @@
 layout (location = 0) in vec2 inUV;
 
 layout (input_attachment_index = 0, binding = 0) uniform subpassInput samplerAlbedo;
-layout (input_attachment_index = 1, binding = 1) uniform subpassInput samplerNormalRoughness;
+layout (binding = 1) uniform sampler2D samplerNormalRoughness;
 
 layout(binding = 2) uniform UniformBufferObject 
 {
@@ -175,15 +175,134 @@ float ShadowedFactor(vec3 worldPos, float NDotL, uint usedCascade)
     }
 }
 
+vec3 ViewSpacePositionFromUV(vec2 uv, mat4 viewInv, mat4 projInv)
+{
+    float z = texture(samplerDepth, uv).r;
+     
+    vec4 clipSpacePosition = vec4(uv * 2.0 - 1.0, z, 1.0);
+    vec4 viewSpacePosition = projInv * clipSpacePosition;
+
+    viewSpacePosition /= viewSpacePosition.w;
+
+    return viewSpacePosition.xyz;
+}
+
+
+/*
+pos -- view space,
+dir -- view space,
+viewInv -- inversed view matrix,
+projInv -- inversed proj matrix
+*/
+float ScreenSpaceShadow(vec3 pos, vec3 dir, vec3 normal , mat4 viewInv, mat4 projInv)
+{
+    vec2 texSize = textureSize(samplerNormalRoughness, 0).xy;
+    
+    float maxDistance = 0.5;
+
+    vec4 startView = vec4(pos.xyz + (dir * 0.0), 1);
+    vec4 endView   = vec4(pos.xyz + (dir * maxDistance), 1);
+
+    vec4 startFrag = startView;
+    startFrag      = ubo.proj * startFrag;
+    startFrag.xyz /= startFrag.w;
+    startFrag.xy   = startFrag.xy * 0.5 + 0.5;
+    startFrag.xy  *= texSize;
+
+    vec4 endFrag = endView;
+    endFrag      = ubo.proj * endFrag;
+    endFrag.xyz /= endFrag.w;
+    endFrag.xy   = endFrag.xy * 0.5 + 0.5;
+    endFrag.xy  *= texSize;
+
+    vec2 uv = vec2(0.0);
+
+    // current position in pixel
+    vec2 frag  = startFrag.xy;
+    // current position's uv in depth texture
+    uv.xy = frag / texSize;
+
+    float deltaX    = endFrag.x - startFrag.x;
+    float deltaY    = endFrag.y - startFrag.y;
+
+    float delta = deltaY;
+    bool useX = false;
+
+    if(dot(dir, normal) < 0)
+    {
+        return 1.0;
+    }
+
+    if(abs(deltaX) > abs(deltaY))
+    {
+        delta = deltaX;
+        useX = true;
+    }
+
+    vec2  increment = vec2(deltaX, deltaY) / abs(delta);
+    bool hit = false;
+
+    int loopCount = int(abs(delta));
+    if(loopCount > 24)
+    {
+        loopCount = 16;
+    }
+
+    for (int i = 0; i < loopCount; i++) 
+    {
+        // Update Screen Space Position
+        frag += increment;
+        // Update Correspond UV
+        uv = frag / texSize;
+
+        if(uv.x > 1.0 || uv.x < 0.0 || uv.y > 1.0 || uv.y < 0.0)
+        {
+            break;
+        }
+
+        vec3 viewSpacePosition = ViewSpacePositionFromUV(uv, viewInv, projInv);
+
+        // current ray march point camera position
+        float ratio = 0.0;
+        
+        if(useX)
+        {
+            ratio = (frag.x - startFrag.x) / deltaX;
+        }
+        else
+        {
+            ratio = (frag.y - startFrag.y) / deltaY;
+        }
+
+        float raymarchDepth = (startView.z * endView.z) / mix(endView.z, startView.z, abs(ratio));
+        float raymarchX = (startView.x * endView.x) / mix(endView.x, startView.x, abs(ratio));
+        float raymarchY = (startView.y * endView.y) / mix(endView.y, startView.y, abs(ratio));
+
+        vec3 raymarchPos = vec3(raymarchX, raymarchY, raymarchDepth);
+        
+        if((raymarchDepth < viewSpacePosition.z) && ((viewSpacePosition.z - raymarchDepth) < 0.07))
+        {
+            hit = true;
+            break;
+        }
+    }
+
+    if(hit)
+    {
+        return 0.0;
+    }
+    else
+    {
+        return 1.0;
+    }
+}
+
 void main()
 {       
-    vec4 normalRoughness = subpassLoad(samplerNormalRoughness);
+    vec2 texSize  = textureSize(samplerNormalRoughness, 0).xy;
+    vec2 texCoord = inUV;
 
-    // if(inUV.x < 0.5)
-    // {
-    //     outColor = vec4( texture(shadowMap0,  vec2((inUV.x) * 2, inUV.y)).rrr, 1.0);
-    //     return;
-    // }
+    vec4 normalRoughness = texture(samplerNormalRoughness, inUV);
 
     if(length(normalRoughness.xyz) <= 0.0)
     {
@@ -232,7 +351,6 @@ void main()
         albedo = vec3(0.0, 0.0, 0.0);
     }
 
-
     vec4 shadowCoord = vec4(0.0);
     if(usedCascade == 0)
     {
@@ -248,34 +366,38 @@ void main()
     }
 
     float shadowFactor = filterPCF(shadowCoord / shadowCoord.w, usedCascade);
-    // float shadowFactor = textureProj(shadowCoord / shadowCoord.w, vec2(0.0), usedCascade);
-    // float shadowFactor = ShadowedFactor(posWS, NDotL, usedCascade);
+
+    float ssShadowFactor = ScreenSpaceShadow(posCS, L, N, viewInv, projInv);
+
+    // if(ssShadowFactor < shadowFactor)
+    // {
+    //     shadowFactor = ssShadowFactor;
+    // }
+
     vec3 blendColor = vec3(1.0, 1.0, 1.0);
-    
-    // if(usedCascade == 0)
-    // {
-    //     blendColor = vec3(0.8, 0.3, 0.3);
-    // }
-    // else if(usedCascade == 1)
-    // {
-    //     blendColor = vec3(0.3, 0.8, 0.3);
-    // }
-    // else if(usedCascade == 2)
-    // {
-    //     blendColor = vec3(0.3, 0.3, 0.8);
-    // }
-
     outColor = vec4(blendColor * (shadowFactor * albedo + ambient + specular), 1.0);
+    // outColor = vec4(posCS, 1.0);
+    if(ssShadowFactor < 1.0)
+    {
+        outColor = vec4(1.0, 0.2, 0.2, 1.0) * outColor;
+    }
 
-    // if(posCS.z > -30.0)
+    // vec4 startView = vec4(posCS, 1);
+    // vec4 startFrag = startView;
+    // startFrag      = ubo.proj * startFrag;
+    // startFrag.xyz /= startFrag.w;
+    // startFrag.xy   = startFrag.xy * 0.5 + 0.5;
+
+    // vec4 endtView = vec4(posCS + L* 2.0, 1);
+    // vec4 endFrag = endtView;
+    // endFrag      = ubo.proj * endFrag;
+    // endFrag.xyz /= endFrag.w;
+    // endFrag.xy   = endFrag.xy * 0.5 + 0.5;
+
+    // if(abs((inUV.x / inUV.y) - abs((endFrag - startFrag).x / (endFrag - startFrag).y)) < 0.01)
     // {
-    //     outColor = vec4(vec3(0.8,0.3,0.3) * shadowFactor * albedo + 0.1 * ambient + specular, 1.0);
+    //     outColor = vec4(1.0, 0.0, 0.0, 1.0);
     // }
-    // else
-    // {
-    //     outColor = vec4(albedo + 0.1 * ambient + specular, 1.0);
-    // }
-    // outColor = vec4( texture(shadowMap, inUV).rrr, 1.0);
-    // outColor = vec4(inUV, 0.0, 1.0);
-    // outColor = vec4(WorldSpaceToScreenSpace(posWS, subo.proj, subo.view), 0.0, 1.0);
+    // outColor = vec4(startFrag.xy, 0.0, 1.0) ;
+    // outColor = vec4(inUV, 0.0, 1.0) ;
 }

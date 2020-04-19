@@ -209,6 +209,16 @@ namespace GFX
         Sample4
     };
 
+    enum class ImageLayout
+    {
+        ColorAttachment,
+        FragmentShaderRead,
+        General,
+        DepthStencilAttachment,
+        Undefined,
+        Present
+    };
+
     struct ImageDescription
     {
         uint32_t width;
@@ -373,6 +383,8 @@ namespace GFX
         AttachmentStoreAction stencilStoreAction = AttachmentStoreAction::DontCare;
         ClearValue clearValue;
         AttachmentType type;
+        ImageLayout initialLayout = ImageLayout::Undefined;
+        ImageLayout finalLayout = ImageLayout::Undefined;
     };
 
     struct SubPassDescription
@@ -705,6 +717,7 @@ namespace GFX
     */
     void UpdateImageMemory(Image image, void* data, size_t size);
     void CopyBufferToImage(Image image, Buffer buffer);
+    void AttachmentLayoutTransition(RenderPass renderPass, uint32_t attachmentIndex, ImageLayout oldLayout, ImageLayout newLayout);
 
     /*
     Uniforms
