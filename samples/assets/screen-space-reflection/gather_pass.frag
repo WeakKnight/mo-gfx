@@ -187,114 +187,55 @@ vec3 ViewSpacePositionFromUV(vec2 uv, mat4 viewInv, mat4 projInv)
     return viewSpacePosition.xyz;
 }
 
-
 /*
 pos -- view space,
 dir -- view space,
 viewInv -- inversed view matrix,
 projInv -- inversed proj matrix
 */
-float ScreenSpaceShadow(vec3 pos, vec3 dir, vec3 normal , mat4 viewInv, mat4 projInv)
+float ScreenSpaceShadow(vec3 pos, vec3 dir, float shadowFactor, mat4 viewInv, mat4 projInv)
 {
-    vec2 texSize = textureSize(samplerNormalRoughness, 0).xy;
-    
-    float maxDistance = 0.5;
-
-    vec4 startView = vec4(pos.xyz + (dir * 0.0), 1);
-    vec4 endView   = vec4(pos.xyz + (dir * maxDistance), 1);
-
-    vec4 startFrag = startView;
-    startFrag      = ubo.proj * startFrag;
-    startFrag.xyz /= startFrag.w;
-    startFrag.xy   = startFrag.xy * 0.5 + 0.5;
-    startFrag.xy  *= texSize;
-
-    vec4 endFrag = endView;
-    endFrag      = ubo.proj * endFrag;
-    endFrag.xyz /= endFrag.w;
-    endFrag.xy   = endFrag.xy * 0.5 + 0.5;
-    endFrag.xy  *= texSize;
-
-    vec2 uv = vec2(0.0);
-
-    // current position in pixel
-    vec2 frag  = startFrag.xy;
-    // current position's uv in depth texture
-    uv.xy = frag / texSize;
-
-    float deltaX    = endFrag.x - startFrag.x;
-    float deltaY    = endFrag.y - startFrag.y;
-
-    float delta = deltaY;
-    bool useX = false;
-
-    if(dot(dir, normal) < 0)
+    // already hard shadow, return shadow factor 
+    if(shadowFactor < 0.05)
     {
-        return 1.0;
+        return shadowFactor;
     }
 
-    if(abs(deltaX) > abs(deltaY))
+    if(pos.z < -6.0)
     {
-        delta = deltaX;
-        useX = true;
+        return shadowFactor;
     }
 
-    vec2  increment = vec2(deltaX, deltaY) / abs(delta);
-    bool hit = false;
-
-    int loopCount = int(abs(delta));
-    if(loopCount > 24)
+    float rejectionDepth = 0.082;
+    // return shadowFactor;
+    for(float i = 0; i < 8; i++)
     {
-        loopCount = 16;
-    }
+        vec3 viewSpaceRay = pos + 0.0055 * dir * (i + 0.1);
+        vec4 projectedRay = ubo.proj * vec4(viewSpaceRay, 1.0);
+        projectedRay = projectedRay / projectedRay.w;
+        vec2 rayUV = projectedRay.xy * 0.5 + vec2(0.5);
 
-    for (int i = 0; i < loopCount; i++) 
-    {
-        // Update Screen Space Position
-        frag += increment;
-        // Update Correspond UV
-        uv = frag / texSize;
-
-        if(uv.x > 1.0 || uv.x < 0.0 || uv.y > 1.0 || uv.y < 0.0)
+        if(rayUV.x > 1.0 || rayUV.x < 0.0 || rayUV.y > 1.0 || rayUV.y < 0.0)
         {
             break;
         }
 
-        vec3 viewSpacePosition = ViewSpacePositionFromUV(uv, viewInv, projInv);
-
-        // current ray march point camera position
-        float ratio = 0.0;
+        // float z = texture(samplerDepth, rayUV).r;
         
-        if(useX)
-        {
-            ratio = (frag.x - startFrag.x) / deltaX;
-        }
-        else
-        {
-            ratio = (frag.y - startFrag.y) / deltaY;
-        }
+        // if(z > 0.89)
+        // {
+        //     continue;
+        // }
 
-        float raymarchDepth = (startView.z * endView.z) / mix(endView.z, startView.z, abs(ratio));
-        float raymarchX = (startView.x * endView.x) / mix(endView.x, startView.x, abs(ratio));
-        float raymarchY = (startView.y * endView.y) / mix(endView.y, startView.y, abs(ratio));
-
-        vec3 raymarchPos = vec3(raymarchX, raymarchY, raymarchDepth);
-        
-        if((raymarchDepth < viewSpacePosition.z) && ((viewSpacePosition.z - raymarchDepth) < 0.07))
+        vec3 actualPos = ViewSpacePositionFromUV(rayUV, viewInv, projInv);
+        float diff = actualPos.z - viewSpaceRay.z;
+        if((diff > 0.01) && (diff < rejectionDepth))
         {
-            hit = true;
-            break;
+            return 0.0;
         }
     }
 
-    if(hit)
-    {
-        return 0.0;
-    }
-    else
-    {
-        return 1.0;
-    }
+    return shadowFactor;
 }
 
 void main()
@@ -367,37 +308,13 @@ void main()
 
     float shadowFactor = filterPCF(shadowCoord / shadowCoord.w, usedCascade);
 
-    float ssShadowFactor = ScreenSpaceShadow(posCS, L, N, viewInv, projInv);
+    float finalShadowFactor = ScreenSpaceShadow(posCS, L, shadowFactor, viewInv, projInv);
 
     // if(ssShadowFactor < shadowFactor)
     // {
     //     shadowFactor = ssShadowFactor;
     // }
 
-    vec3 blendColor = vec3(1.0, 1.0, 1.0);
-    outColor = vec4(blendColor * (shadowFactor * albedo + ambient + specular), 1.0);
-    // outColor = vec4(posCS, 1.0);
-    if(ssShadowFactor < 1.0)
-    {
-        outColor = vec4(1.0, 0.2, 0.2, 1.0) * outColor;
-    }
-
-    // vec4 startView = vec4(posCS, 1);
-    // vec4 startFrag = startView;
-    // startFrag      = ubo.proj * startFrag;
-    // startFrag.xyz /= startFrag.w;
-    // startFrag.xy   = startFrag.xy * 0.5 + 0.5;
-
-    // vec4 endtView = vec4(posCS + L* 2.0, 1);
-    // vec4 endFrag = endtView;
-    // endFrag      = ubo.proj * endFrag;
-    // endFrag.xyz /= endFrag.w;
-    // endFrag.xy   = endFrag.xy * 0.5 + 0.5;
-
-    // if(abs((inUV.x / inUV.y) - abs((endFrag - startFrag).x / (endFrag - startFrag).y)) < 0.01)
-    // {
-    //     outColor = vec4(1.0, 0.0, 0.0, 1.0);
-    // }
-    // outColor = vec4(startFrag.xy, 0.0, 1.0) ;
-    // outColor = vec4(inUV, 0.0, 1.0) ;
+    vec3 blendColor = vec3(1.0);
+    outColor = vec4(blendColor * (finalShadowFactor * albedo + ambient + specular), 1.0);
 }
