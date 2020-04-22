@@ -66,7 +66,7 @@ const mat4 biasMat = mat4(
 float textureProj(vec4 shadowCoord, vec2 offset, uint cascadeIndex)
 {
 	float shadow = 1.0;
-	float bias = 0.0003;
+	float bias = 0.0002;
 
 	if (shadowCoord.z > -1.0 && shadowCoord.z < 1.0) 
     {
