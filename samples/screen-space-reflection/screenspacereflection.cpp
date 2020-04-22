@@ -30,13 +30,16 @@
 #define HDR_ATTACHMENT_INDEX 3
 #define DEPTH_ATTACHMENT_INDEX 4
 #define SSR_ATTACHMENT_INDEX 5
+#define SSR_BLUR_ATTACHMENT_INDEX 6
+
 //#define SSR_GATHER_ATTACHMENT_INDEX 6
 
 #define MRT_PASS_INDEX 0
 #define GATHER_PASS_INDEX 1
 #define SSR_PASS_INDEX 2
+#define SSR_BLUR_PASS_INDEX 3
 //#define SSR_GATHER_PASS_INDEX 3
-#define PRESENT_PASS_INDEX 3
+#define PRESENT_PASS_INDEX 4
 
 class ModelUniformBlock
 {
@@ -73,6 +76,7 @@ struct GatheringPassUniformData
 	glm::mat4 proj;
 };
 
+struct SSRBlurPass;
 struct SSRPass;
 class Skybox;
 
@@ -95,6 +99,7 @@ static PipelineObject* s_meshMRTPipelineObject = nullptr;
 static PipelineObject* s_gatherPipelineObject = nullptr;
 static PipelineObject* s_presentPipelineObject = nullptr;
 static SSRPass* s_ssrPass = nullptr;
+static SSRBlurPass* s_ssrBlurPass = nullptr;
 
 static GFX::UniformLayout s_gatherUniformLayout;
 static GFX::Uniform s_gatherUniform;
@@ -325,8 +330,7 @@ struct PresentUniform
 	{
 		GFX::UniformLayoutDescription uniformLayoutDescription = {};
 		uniformLayoutDescription.AddUniformBinding(0, GFX::UniformType::SampledImage, GFX::ShaderStage::Fragment, 1);
-		uniformLayoutDescription.AddUniformBinding(1, GFX::UniformType::SampledImage, GFX::ShaderStage::Fragment, 1);
-		uniformLayoutDescription.AddUniformBinding(2, GFX::UniformType::UniformBuffer, GFX::ShaderStage::Fragment, 1);
+		uniformLayoutDescription.AddUniformBinding(1, GFX::UniformType::UniformBuffer, GFX::ShaderStage::Fragment, 1);
 
 		uniformLayout = GFX::CreateUniformLayout(uniformLayoutDescription);
 	}
@@ -334,9 +338,9 @@ struct PresentUniform
 	void CreateUniform()
 	{
 		GFX::UniformDescription uniformDesc = {};
-		uniformDesc.AddSampledAttachmentAttribute(0, s_meshRenderPass, HDR_ATTACHMENT_INDEX, s_nearestSampler);
-		uniformDesc.AddSampledAttachmentAttribute(1, s_meshRenderPass, SSR_ATTACHMENT_INDEX, s_nearestSampler);
-		uniformDesc.AddBufferAttribute(2, uniformBuffer, 0, sizeof(PresentUniformBufferObject));
+		uniformDesc.AddSampledAttachmentAttribute(0, s_meshRenderPass, SSR_BLUR_ATTACHMENT_INDEX, s_nearestSampler);
+		uniformDesc.AddBufferAttribute(1, uniformBuffer, 0, sizeof(PresentUniformBufferObject));
+
 		uniformDesc.SetUniformLayout(uniformLayout);
 		uniformDesc.SetStorageMode(GFX::UniformStorageMode::Dynamic);
 
@@ -352,13 +356,80 @@ struct PresentUniform
 	void UpdateUniform()
 	{
 		ubo.WidthHeightExposureNo = glm::vec4(s_width, s_height, s_exposure, 0.0f);
-		GFX::UpdateUniformBuffer(uniform, 2, &ubo);
+		GFX::UpdateUniformBuffer(uniform, 1, &ubo);
 	}
 
 	PresentUniformBufferObject ubo = {};
 	GFX::UniformLayout uniformLayout = {};
 	GFX::Uniform uniform = {};
 	GFX::Buffer uniformBuffer = {};
+};
+
+struct SSRBlurPass
+{
+	SSRBlurPass()
+	{
+		CreateUniformLayout();
+		CreateUniform();
+		CreatePipeline();
+	}
+
+	~SSRBlurPass()
+	{
+		GFX::DestroyUniformLayout(uniformLayout);
+		GFX::DestroyUniform(uniform);
+		PipelineObject::Destroy(pipeline);
+		delete pipeline;
+	}
+
+	void Resize()
+	{
+		GFX::DestroyUniform(uniform);
+		CreateUniform();
+	}
+
+	void CreateUniformLayout()
+	{
+		GFX::UniformLayoutDescription uniformLayoutDesc = {};
+		uniformLayoutDesc.AddUniformBinding(0, GFX::UniformType::SampledImage, GFX::ShaderStage::Fragment, 1);
+		uniformLayoutDesc.AddUniformBinding(1, GFX::UniformType::SampledImage, GFX::ShaderStage::Fragment, 1);
+
+		uniformLayout = GFX::CreateUniformLayout(uniformLayoutDesc);
+	}
+
+	void CreateUniform()
+	{
+		GFX::UniformDescription uniformDesc = {};
+		uniformDesc.AddSampledAttachmentAttribute(0, s_meshRenderPass, HDR_ATTACHMENT_INDEX, s_nearestSampler);
+		uniformDesc.AddSampledAttachmentAttribute(1, s_meshRenderPass, SSR_ATTACHMENT_INDEX, s_nearestSampler);
+
+		uniformDesc.SetStorageMode(GFX::UniformStorageMode::Dynamic);
+		uniformDesc.SetUniformLayout(uniformLayout);
+
+		uniform = GFX::CreateUniform(uniformDesc);
+	}
+
+	void CreatePipeline()
+	{
+		pipeline = PipelineObject::Create();
+
+
+		GFX::VertexBindings vertexBindings = {};
+
+		GFX::UniformBindings uniformBindings = {};
+		uniformBindings.AddUniformLayout(uniformLayout);
+
+		pipeline->Build(s_meshRenderPass,
+			SSR_BLUR_PASS_INDEX, 1,
+			vertexBindings, uniformBindings,
+			"screen-space-reflection/screen_quad.vert", "screen-space-reflection/ssr_blur_pass.frag",
+			false,
+			GFX::CullFace::None);
+	}
+
+	PipelineObject* pipeline = nullptr;
+	GFX::UniformLayout uniformLayout = {};
+	GFX::Uniform uniform = {};
 };
 
 struct SSRPassUBO
@@ -497,6 +568,7 @@ static void framebufferResizeCallback(GLFWwindow* window, int width, int height)
 
 	presentUniform->Resize();
 	s_ssrPass->Resize();
+	s_ssrBlurPass->Resize();
 }
 
 float lastX = s_width / 2.0f;
@@ -713,20 +785,20 @@ GFX::RenderPass CreateScreenSpaceReflectionRenderPass()
 	ssrClearColor.SetColor(GFX::Color(0.0f, 0.0f, 0.0f, 1.0f));
 	ssrAttachment.clearValue = ssrClearColor;
 
-	// Index 5 SSR Attachment
-	GFX::AttachmentDescription ssrGatherAttachment = {};
-	ssrGatherAttachment.width = s_width;
-	ssrGatherAttachment.height = s_height;
-	ssrGatherAttachment.format = GFX::Format::R16G16B16A16F;
-	ssrGatherAttachment.loadAction = GFX::AttachmentLoadAction::Clear;
-	ssrGatherAttachment.storeAction = GFX::AttachmentStoreAction::Store;
-	ssrGatherAttachment.type = GFX::AttachmentType::Color;
-	ssrGatherAttachment.initialLayout = GFX::ImageLayout::Undefined;
-	ssrGatherAttachment.finalLayout = GFX::ImageLayout::FragmentShaderRead;
+	// Index 6 SSR Blur Attachment
+	GFX::AttachmentDescription ssrBlurAttachment = {};
+	ssrBlurAttachment.width = s_width;
+	ssrBlurAttachment.height = s_height;
+	ssrBlurAttachment.format = GFX::Format::R16G16B16A16F;
+	ssrBlurAttachment.loadAction = GFX::AttachmentLoadAction::Clear;
+	ssrBlurAttachment.storeAction = GFX::AttachmentStoreAction::DontCare;
+	ssrBlurAttachment.type = GFX::AttachmentType::Color;
+	ssrBlurAttachment.initialLayout = GFX::ImageLayout::Undefined;
+	ssrBlurAttachment.finalLayout = GFX::ImageLayout::FragmentShaderRead;
 
-	GFX::ClearValue ssrGatherClearColor = {};
-	ssrGatherClearColor.SetColor(GFX::Color(0.0f, 0.0f, 0.0f, 1.0f));
-	ssrGatherAttachment.clearValue = ssrGatherClearColor;
+	GFX::ClearValue ssrBlurClearColor = {};
+	ssrBlurClearColor.SetColor(GFX::Color(0.0f, 0.0f, 0.0f, 1.0f));
+	ssrBlurAttachment.clearValue = ssrBlurClearColor;
 
 	// Subpass 0, GBufferPass
 	GFX::SubPassDescription subpassGBuffer = {};
@@ -762,22 +834,22 @@ GFX::RenderPass CreateScreenSpaceReflectionRenderPass()
 	subpassSSR.inputAttachments.push_back(HDR_ATTACHMENT_INDEX);
 	subpassSSR.pipelineType = GFX::PipelineType::Graphics;
 
-	//// Subpass 3 SSR Composite Pass
-	//GFX::SubPassDescription subpassSSRGather = {};
-	//// Render To SSR Composite Attachment
-	//subpassSSRGather.colorAttachments.push_back(SSR_GATHER_ATTACHMENT_INDEX);
+	// Subpass 3 SSR BLUR Pass
+	GFX::SubPassDescription subpassTAA = {};
+	// Render To SSR Composite Attachment
+	subpassTAA.colorAttachments.push_back(SSR_BLUR_ATTACHMENT_INDEX);
 
-	//subpassSSRGather.inputAttachments.push_back(HDR_ATTACHMENT_INDEX);
-	//subpassSSRGather.inputAttachments.push_back(SSR_ATTACHMENT_INDEX);
-	//subpassSSRGather.pipelineType = GFX::PipelineType::Graphics;
+	subpassTAA.inputAttachments.push_back(HDR_ATTACHMENT_INDEX);
+	subpassTAA.inputAttachments.push_back(SSR_ATTACHMENT_INDEX);
 
-	// Subpass 3 Present
+	subpassTAA.pipelineType = GFX::PipelineType::Graphics;
+
+	// Subpass 4 Present
 	GFX::SubPassDescription subpassPresent = {};
 	// Render To Swapchain
 	subpassPresent.colorAttachments.push_back(0);
 	//// Input SSR Composite Attachment
-	subpassPresent.inputAttachments.push_back(HDR_ATTACHMENT_INDEX);
-	subpassPresent.inputAttachments.push_back(SSR_ATTACHMENT_INDEX);
+	subpassPresent.inputAttachments.push_back(SSR_BLUR_ATTACHMENT_INDEX);
 	subpassPresent.pipelineType = GFX::PipelineType::Graphics;
 
 	GFX::DependencyDescription dependencyDesc0 = {};
@@ -804,13 +876,13 @@ GFX::RenderPass CreateScreenSpaceReflectionRenderPass()
 	dependencyDesc2.srcAccess = GFX::Access::ColorAttachmentWrite;
 	dependencyDesc2.dstAccess = GFX::Access::ShaderRead;
 
-	//GFX::DependencyDescription dependencyDesc3 = {};
-	//dependencyDesc3.srcSubpass = 3;
-	//dependencyDesc3.dstSubpass = 4;
-	//dependencyDesc3.srcStage = GFX::PipelineStage::ColorAttachmentOutput;
-	//dependencyDesc3.dstStage = GFX::PipelineStage::FragmentShader;
-	//dependencyDesc3.srcAccess = GFX::Access::ColorAttachmentWrite;
-	//dependencyDesc3.dstAccess = GFX::Access::ShaderRead;
+	GFX::DependencyDescription dependencyDesc3 = {};
+	dependencyDesc3.srcSubpass = 3;
+	dependencyDesc3.dstSubpass = 4;
+	dependencyDesc3.srcStage = GFX::PipelineStage::ColorAttachmentOutput;
+	dependencyDesc3.dstStage = GFX::PipelineStage::FragmentShader;
+	dependencyDesc3.srcAccess = GFX::Access::ColorAttachmentWrite;
+	dependencyDesc3.dstAccess = GFX::Access::ShaderRead;
 
 
 	GFX::RenderPassDescription renderPassDesc = {};
@@ -823,18 +895,18 @@ GFX::RenderPass CreateScreenSpaceReflectionRenderPass()
 	renderPassDesc.attachments.push_back(hdrAttachment);
 	renderPassDesc.attachments.push_back(depthAttachment);
 	renderPassDesc.attachments.push_back(ssrAttachment);
-	renderPassDesc.attachments.push_back(ssrGatherAttachment);
+	renderPassDesc.attachments.push_back(ssrBlurAttachment);
 
 	renderPassDesc.subpasses.push_back(subpassGBuffer);
 	renderPassDesc.subpasses.push_back(subpassGather);
 	renderPassDesc.subpasses.push_back(subpassSSR);
-	// renderPassDesc.subpasses.push_back(subpassSSRGather);
+	renderPassDesc.subpasses.push_back(subpassTAA);
 	renderPassDesc.subpasses.push_back(subpassPresent);
 
 	renderPassDesc.dependencies.push_back(dependencyDesc0);
 	renderPassDesc.dependencies.push_back(dependencyDesc1);
 	renderPassDesc.dependencies.push_back(dependencyDesc2);
-	//renderPassDesc.dependencies.push_back(dependencyDesc3);
+	renderPassDesc.dependencies.push_back(dependencyDesc3);
 
 	return GFX::CreateRenderPass(renderPassDesc);
 }
@@ -1017,6 +1089,7 @@ void ScreenSpaceReflectionExample::Init()
 	CreateGatheringPipeline();
 	CreatePresentPipeline();
 	s_ssrPass = new SSRPass();
+	s_ssrBlurPass = new SSRBlurPass();
 
 	s_camera = new Camera();
 }
@@ -1133,6 +1206,12 @@ void ScreenSpaceReflectionExample::MainLoop()
 			GFX::BindUniform(s_ssrPass->uniform, 0);
 			GFX::Draw(3, 1, 0, 0);
 
+			//========================SSRBlurPass Pass
+			GFX::NextSubpass();
+			GFX::ApplyPipeline(s_ssrBlurPass->pipeline->pipeline);
+			GFX::BindUniform(s_ssrBlurPass->uniform, 0);
+			GFX::Draw(3, 1, 0, 0);
+
 			//=======================Present Pass
 			GFX::NextSubpass();
 			GFX::ApplyPipeline(s_presentPipelineObject->pipeline);
@@ -1171,6 +1250,7 @@ void ScreenSpaceReflectionExample::CleanUp()
 
 	delete presentUniform;
 	delete s_ssrPass;
+	delete s_ssrBlurPass;
 
 	GFX::DestroySampler(s_depthSampler);
 	GFX::DestroySampler(s_nearestSampler);

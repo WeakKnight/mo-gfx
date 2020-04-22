@@ -2,10 +2,9 @@
 
 layout (location = 0) in vec2 inUV;
 
-layout (binding = 0) uniform sampler2D samplerHdr;
-layout (binding = 1) uniform sampler2D samplerSSRComposite;
+layout (binding = 0) uniform sampler2D samplerSSRBlur;
 
-layout (binding = 2) uniform PresentUniformBufferObject
+layout (binding = 1) uniform PresentUniformBufferObject
 {
     vec4 WidthHeightExposureNo;
     vec4 Nothing0;
@@ -22,6 +21,53 @@ const float D = 0.20;
 const float E = 0.02;
 const float F = 0.30;
 const vec3 W = vec3(11.2);
+
+const float FXAA_SPAN_MAX = 8.;
+const float FXAA_REDUCE_MIN = 1. / 128.;
+const float FXAA_REDUCE_MUL = 1. / 8.;
+
+vec3 FXAA ()
+{
+    vec2 uv = inUV;
+    vec2 offset = 1.0 / textureSize(samplerSSRBlur, 0);
+
+    vec3 lum = vec3 (.299, .587, .114);
+    float lumTL = dot (lum, texture (samplerSSRBlur, (uv + vec2 (-1., -1.))*offset).rgb);
+    float lumBL = dot (lum, texture (samplerSSRBlur, (uv + vec2 (-1., 1.))*offset).rgb);
+    float lumC  = dot (lum, texture (samplerSSRBlur, uv).rgb);
+    float lumTR = dot (lum, texture (samplerSSRBlur, (uv + vec2 (1., -1.))*offset).rgb);
+    float lumBR = dot (lum, texture (samplerSSRBlur, (uv + vec2 (1., 1.))*offset).rgb);
+
+    vec2 blurDir;
+    float blurReduce = max((lumTR + lumTL + lumBR + lumBL) * (FXAA_REDUCE_MUL * .25),
+                           FXAA_REDUCE_MIN);
+    blurDir.x = ((lumTR + lumTL) - (lumBR + lumBL));
+    blurDir.y = ((lumTL + lumBL) - (lumTR + lumBR));
+    float inverseDirAdjustment = 1. / (min (abs (blurDir.x), abs (blurDir.y)) + blurReduce);
+    
+    blurDir = min (vec2 (FXAA_SPAN_MAX), max (vec2 (-FXAA_SPAN_MAX),
+                                              blurDir * inverseDirAdjustment));
+    blurDir *= offset;
+
+    vec3 result1 = .5 * (texture (samplerSSRBlur, uv + blurDir * vec2 (1. / .3 - .5)).rgb +
+                         texture (samplerSSRBlur, uv + blurDir * vec2 (2. / .3 - .5)).rgb);
+    vec3 result2 = result1 * .5 +
+                   .25 * (texture (samplerSSRBlur, uv + blurDir * vec2 (0. / .3 - .5)).rgb +
+                          texture (samplerSSRBlur, uv + blurDir * vec2 (3. / .3 - .5)).rgb);
+
+    float lumMin = min (lumC, min (min (lumTL, lumTR), min (lumBL, lumBR)));
+    float lumMax = max (lumC, max (max (lumTL, lumTR), max (lumBL, lumBR)));
+    float lumResult2 = dot (lum, result2);
+    vec3 color = vec3 (.0);
+
+    if (lumResult2 > lumMax || lumResult2 < lumMin) {
+        color = result1;
+    } else {
+        color = result2;
+    }
+
+    return color;
+}
 
 vec3 Uncharted2Tonemap(vec3 x)
 {
@@ -52,7 +98,8 @@ void main()
     const float exposure = 1.0;
 
     // vec3 hdrColor = subpassLoad(samplerHdr).rgb;
-    vec3 hdrColor = texture(samplerHdr, inUV).rgb + texture(samplerSSRComposite, inUV).rgb;
+    // vec3 hdrColor = FXAA();
+    vec3 hdrColor = texture(samplerSSRBlur, inUV).rgb;
 
     // vec3 mappedColor = vec3(1.0) - exp(-hdrColor * exposure);
     //  // Gamma Correction

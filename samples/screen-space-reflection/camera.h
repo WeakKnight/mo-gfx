@@ -67,13 +67,10 @@ public:
     // Returns the view matrix calculated using Euler Angles and the LookAt Matrix
     glm::mat4 GetViewMatrix() const 
     {
-        return glm::lookAt(Position, Position + Front, Up);
+        return jitterMatrix * glm::lookAt(Position, Position + Front, Up);
     }
 
-    void UpdateAspect(float width, float height)
-    {
-        aspect = width / height;
-    }
+    void UpdateAspect(float width, float height);
 
     glm::mat4 GetProjectionMatrix() const
     {
@@ -131,6 +128,12 @@ public:
     }
 
 private:
+    uint32_t timer = 0;
+    uint32_t width = 0;
+    uint32_t height = 0;
+
+    glm::mat4 jitterMatrix = glm::mat4(1.0f);
+
     // Calculates the front vector from the Camera's (updated) Euler Angles
     void updateCameraVectors()
     {

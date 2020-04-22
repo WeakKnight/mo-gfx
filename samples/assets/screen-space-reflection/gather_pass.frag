@@ -279,11 +279,11 @@ void main()
     float HDotN = clamp(dot(H, N), 0.0, 1.0);
 
     vec3 NWorld = normalize(mat3(viewInv) * N);
-    vec3 radiance = texture(irradianceMap, vec3(-1.0, 1.0, 1.0) * NWorld).rgb;
+    vec3 radiance = 2.0 * texture(irradianceMap, vec3(-1.0, 1.0, 1.0) * NWorld).rgb;
     float roughness = normalRoughness.w;
 
     vec3 specular = vec3(0.0, 0.0, 0.0);
-    vec3 albedo = (NDotL * ubo.lightColor.rgb) * subpassLoad(samplerAlbedo).rgb;
+    vec3 albedo = (NDotL * 5.0 * ubo.lightColor.rgb) * subpassLoad(samplerAlbedo).rgb;
     vec3 ambient = radiance * subpassLoad(samplerAlbedo).rgb;
     
     if(roughness < 0.5)
