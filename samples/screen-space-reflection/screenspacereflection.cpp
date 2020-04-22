@@ -74,6 +74,7 @@ struct GatheringPassUniformData
 };
 
 struct SSRPass;
+class Skybox;
 
 const int WIDTH = 800;
 const int HEIGHT = 600;
@@ -108,6 +109,7 @@ static GFX::Image s_irradianceMap;
 static ShadowMap* s_shadowMap;
 
 static Camera* s_camera = nullptr;
+static Skybox* skybox = nullptr;
 
 class Skybox
 {
@@ -424,6 +426,7 @@ struct SSRPass
 		// hdr
 		uniformLayoutDesc.AddUniformBinding(2, GFX::UniformType::SampledImage, GFX::ShaderStage::Fragment, 1);
 		uniformLayoutDesc.AddUniformBinding(3, GFX::UniformType::UniformBuffer, GFX::ShaderStage::Fragment, 1);
+		uniformLayoutDesc.AddUniformBinding(4, GFX::UniformType::SampledImage, GFX::ShaderStage::Fragment, 1);
 
 		uniformLayout = GFX::CreateUniformLayout(uniformLayoutDesc);
 	}
@@ -435,6 +438,8 @@ struct SSRPass
 		uniformDesc.AddSampledAttachmentAttribute(1, s_meshRenderPass, DEPTH_ATTACHMENT_INDEX, s_nearestSampler);
 		uniformDesc.AddSampledAttachmentAttribute(2, s_meshRenderPass, HDR_ATTACHMENT_INDEX, s_nearestSampler);
 		uniformDesc.AddBufferAttribute(3, buffer, 0, sizeof(SSRPassUBO));
+		uniformDesc.AddImageAttribute(4, skybox->image, skybox->sampler);
+
 		uniformDesc.SetStorageMode(GFX::UniformStorageMode::Dynamic);
 		uniformDesc.SetUniformLayout(uniformLayout);
 
@@ -467,7 +472,6 @@ struct SSRPass
 	SSRPassUBO ubo = {};
 };
 
-static Skybox* skybox = nullptr;
 static PresentUniform* presentUniform = nullptr;
 
 // timing
@@ -1042,6 +1046,13 @@ void ScreenSpaceReflectionExample::MainLoop()
 		if (glfwGetKey(m_window, GLFW_KEY_D) == GLFW_PRESS)
 		{
 			s_camera->ProcessKeyboard(Camera_Movement::RIGHT, deltaTime);
+		}
+
+		if (glfwGetKey(m_window, GLFW_KEY_U) == GLFW_PRESS)
+		{
+		}
+		if (glfwGetKey(m_window, GLFW_KEY_I) == GLFW_PRESS)
+		{
 		}
 
 		s_camera->UpdateAspect(s_width, s_height);

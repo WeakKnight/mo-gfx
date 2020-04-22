@@ -101,7 +101,7 @@ float filterPCF(vec4 sc, uint cascadeIndex)
 
 	float shadowFactor = 0.0;
 	int count = 0;
-	int range = 1;
+	int range = 2;
 	
 	for (int x = -range; x <= range; x++) {
 		for (int y = -range; y <= range; y++) {
@@ -201,14 +201,14 @@ float ScreenSpaceShadow(vec3 pos, vec3 dir, float shadowFactor, mat4 viewInv, ma
         return shadowFactor;
     }
 
-    if(pos.z < -6.0)
+    if(pos.z < -5.8)
     {
         return shadowFactor;
     }
 
     float rejectionDepth = 0.082;
     // return shadowFactor;
-    for(float i = 0; i < 8; i++)
+    for(float i = 0; i < 10; i++)
     {
         vec3 viewSpaceRay = pos + 0.0055 * dir * (i + 0.1);
         vec4 projectedRay = ubo.proj * vec4(viewSpaceRay, 1.0);
@@ -229,7 +229,7 @@ float ScreenSpaceShadow(vec3 pos, vec3 dir, float shadowFactor, mat4 viewInv, ma
 
         vec3 actualPos = ViewSpacePositionFromUV(rayUV, viewInv, projInv);
         float diff = actualPos.z - viewSpaceRay.z;
-        if((diff > 0.01) && (diff < rejectionDepth))
+        if((diff > 0.012) && (diff < rejectionDepth))
         {
             return 0.0;
         }
@@ -288,8 +288,9 @@ void main()
     
     if(roughness < 0.5)
     {
-        specular = texture(skybox, vec3(-1.0, 1.0, 1.0) * normalize(mat3(viewInv) * RealR)).rgb;
+        specular = vec3(0.0, 0.0, 0.0);
         albedo = vec3(0.0, 0.0, 0.0);
+        ambient = vec3(0.0, 0.0, 0.0);
     }
 
     vec4 shadowCoord = vec4(0.0);
