@@ -456,6 +456,8 @@ struct SSRPassUBO
 
 struct SSRPass
 {
+	float visualizeSSR = 0.0;
+
 	SSRPass()
 	{
 		CreateBuffer();
@@ -494,7 +496,7 @@ struct SSRPass
 		ubo.view = s_camera->GetViewMatrix();
 		ubo.proj = s_camera->GetProjectionMatrix();
 		ubo.lightDir = lightDir;
-		ubo.screenSize = glm::vec4(s_width, s_height, 0.0f, 0.0f);
+		ubo.screenSize = glm::vec4(s_width, s_height, visualizeSSR, 0.0f);
 
 		GFX::UpdateUniformBuffer(uniform, 3, &ubo);
 	}
@@ -1046,6 +1048,11 @@ void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mods
 	if (key == GLFW_KEY_P && action == GLFW_PRESS)
 	{
 		presentUniform->visDithering = presentUniform->visDithering > 0.5f ? 0.0f : 1.0f;
+	}
+
+	if (key == GLFW_KEY_K && action == GLFW_PRESS)
+	{
+		s_ssrPass->visualizeSSR = s_ssrPass->visualizeSSR > 0.5f ? 0.0f : 1.0f;
 	}
 }
 

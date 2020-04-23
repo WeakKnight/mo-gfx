@@ -71,6 +71,7 @@ float Schlick(float NDotV)
 
 void main()
 {
+    bool closeSSR = ubo.screenSize.z  > 0.5? true:false;  
     vec4 normalRoughness = texture(samplerNormalRoughness, inUV);
     float roughness = normalRoughness.w;
 
@@ -230,6 +231,14 @@ void main()
     
     float reflectance = Schlick(dot(N,V));
     vec3 originalColor = vec3(0.73, 0.95, 0.78);
+
     vec3 finalColor = (1 - reflectance) * originalColor + reflectance * ((1-visibility) * texture(skybox, mat3(viewInv) * R).rgb + visibility * texture(samplerHDR, uv.xy).rgb);
-    outColor = vec4(finalColor, 1.0);
+    if(closeSSR)
+    {
+        outColor = vec4(originalColor, 1.0);
+    }
+    else
+    {
+        outColor = vec4(finalColor, 1.0);
+    }
 }
