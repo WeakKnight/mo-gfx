@@ -1022,6 +1022,14 @@ int main(int, char** args)
 	return 0;
 }
 
+void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mods)
+{
+	if (key == GLFW_KEY_U && action  == GLFW_PRESS)
+	{
+		s_shadowMap->visualize = s_shadowMap->visualize > 0.5f ? 0.0f : 1.0f;
+	}
+}
+
 void ScreenSpaceReflectionExample::Init()
 {
 	spdlog::info("Hello Screen Space Reflection");
@@ -1036,6 +1044,8 @@ void ScreenSpaceReflectionExample::Init()
 	glfwSetFramebufferSizeCallback(m_window, framebufferResizeCallback);
 
 	glfwSetCursorPosCallback(m_window, MouseCallback);
+
+	glfwSetKeyCallback(m_window, KeyCallback);
 
 	GFX::InitialDescription initDesc = {};
 	initDesc.debugMode = true;
@@ -1102,6 +1112,8 @@ void ScreenSpaceReflectionExample::Init()
 	s_camera = new Camera();
 }
 
+static std::unordered_map<int, bool> keyMap;
+
 void ScreenSpaceReflectionExample::MainLoop()
 {
 	while (!glfwWindowShouldClose(m_window))
@@ -1127,13 +1139,6 @@ void ScreenSpaceReflectionExample::MainLoop()
 		if (glfwGetKey(m_window, GLFW_KEY_D) == GLFW_PRESS)
 		{
 			s_camera->ProcessKeyboard(Camera_Movement::RIGHT, deltaTime);
-		}
-
-		if (glfwGetKey(m_window, GLFW_KEY_U) == GLFW_PRESS)
-		{
-		}
-		if (glfwGetKey(m_window, GLFW_KEY_I) == GLFW_PRESS)
-		{
 		}
 
 		s_camera->Update(s_width, s_height, deltaTime);

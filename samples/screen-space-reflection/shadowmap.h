@@ -45,6 +45,7 @@ public:
 
 	std::array<Cascade, SHADOW_MAP_CASCADE_COUNT> cascades = {};
 	float cascadeSplitLambda = 0.75f;
+	float visualize = 0.0;
 
 	class ShadowMapUniformObject
 	{
@@ -53,7 +54,7 @@ public:
 		glm::mat4 proj;
 		// split 0, split 1, split2, currentIndex
 		glm::vec4 splitPoints;
-		glm::vec4 nothing;
+		glm::vec4 config0;
 		glm::vec4 nothing1;
 		glm::vec4 nothing2;
 	};
@@ -188,6 +189,7 @@ public:
 		ubo0.view = cascades[0].view;
 		ubo0.proj = cascades[0].proj;
 		ubo0.splitPoints = glm::vec4(cascades[0].splitDepth, cascades[1].splitDepth, cascades[2].splitDepth, 0);
+		ubo0.config0 = glm::vec4(visualize, 0.0f, 0.0f, 0.0f);
 
 		ubo1.view = cascades[1].view;
 		ubo1.proj = cascades[1].proj;

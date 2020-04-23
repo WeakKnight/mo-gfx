@@ -248,6 +248,8 @@ void main()
 
     vec4 normalRoughness = texture(samplerNormalRoughness, inUV);
 
+    bool visualize = subo0.config0.x > 0.5?true:false; 
+
     if(length(normalRoughness.xyz) <= 0.0)
     {
         discard;
@@ -320,5 +322,20 @@ void main()
     // }
 
     vec3 blendColor = vec3(1.0);
+    if(visualize)
+    {
+        if(usedCascade == 0)
+        {
+            blendColor = vec3(1.0, 0.4, 0.4);
+        }
+        else if(usedCascade == 1)
+        {
+            blendColor = vec3(0.4, 1.0, 0.4);
+        }
+        else
+        {
+            blendColor = vec3(0.4, 0.4, 1.0);
+        }
+    }
     outColor = vec4(blendColor * (finalShadowFactor * albedo + ambient + specular), 1.0);
 }
