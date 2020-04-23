@@ -363,6 +363,7 @@ struct PresentUniform
 		ubo.WidthHeightExposureNo = glm::vec4(s_width, s_height, s_exposure, 0.0f);
 		ubo.proj = s_camera->GetProjectionMatrix();
 		ubo.view = s_camera->GetViewMatrix();
+		ubo.Nothing0 = glm::vec4(visCloseDof, visDithering, 0.0f, 0.0f);
 
 		GFX::UpdateUniformBuffer(uniform, 1, &ubo);
 	}
@@ -371,6 +372,9 @@ struct PresentUniform
 	GFX::UniformLayout uniformLayout = {};
 	GFX::Uniform uniform = {};
 	GFX::Buffer uniformBuffer = {};
+
+	float visCloseDof = 0.0;
+	float visDithering = 0.0;
 };
 
 struct SSRBlurPass
@@ -1027,6 +1031,21 @@ void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mods
 	if (key == GLFW_KEY_U && action  == GLFW_PRESS)
 	{
 		s_shadowMap->visualize = s_shadowMap->visualize > 0.5f ? 0.0f : 1.0f;
+	}
+
+	if (key == GLFW_KEY_I && action == GLFW_PRESS)
+	{
+		s_shadowMap->contactShadowVisualize = s_shadowMap->contactShadowVisualize > 0.5f ? 0.0f : 1.0f;
+	}
+
+	if (key == GLFW_KEY_O && action == GLFW_PRESS)
+	{
+		presentUniform->visCloseDof = presentUniform->visCloseDof > 0.5f ? 0.0f : 1.0f;
+	}
+
+	if (key == GLFW_KEY_P && action == GLFW_PRESS)
+	{
+		presentUniform->visDithering = presentUniform->visDithering > 0.5f ? 0.0f : 1.0f;
 	}
 }
 

@@ -249,6 +249,7 @@ void main()
     vec4 normalRoughness = texture(samplerNormalRoughness, inUV);
 
     bool visualize = subo0.config0.x > 0.5?true:false; 
+    bool contactShadowVisualize = subo0.config0.y > 0.5?true:false; 
 
     if(length(normalRoughness.xyz) <= 0.0)
     {
@@ -314,7 +315,15 @@ void main()
 
     float shadowFactor = filterPCF(shadowCoord / shadowCoord.w, usedCascade);
 
-    float finalShadowFactor = ScreenSpaceShadow(posCS, L, shadowFactor, viewInv, projInv);
+    float finalShadowFactor = 1.0;
+    if(contactShadowVisualize)
+    {
+        finalShadowFactor = shadowFactor;
+    }
+    else
+    {
+        finalShadowFactor = ScreenSpaceShadow(posCS, L, shadowFactor, viewInv, projInv);
+    }
 
     // if(ssShadowFactor < shadowFactor)
     // {
@@ -337,5 +346,6 @@ void main()
             blendColor = vec3(0.4, 0.4, 1.0);
         }
     }
+
     outColor = vec4(blendColor * (finalShadowFactor * albedo + ambient + specular), 1.0);
 }

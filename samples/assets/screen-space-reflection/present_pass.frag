@@ -7,7 +7,7 @@ layout (binding = 0) uniform sampler2D samplerSSRBlur;
 layout (binding = 1) uniform PresentUniformBufferObject
 {
     vec4 WidthHeightExposureNo;
-    vec4 Nothing0;
+    vec4 Config0;
     vec4 Nothing1;
     vec4 Nothing2;
     mat4 view;
@@ -176,6 +176,9 @@ vec3 ScreenSpaceDither( vec2 vScreenPos )
 
 void main()
 {
+    bool visCloseDof = ubo.Config0.x > 0.5?true:false; 
+    bool visCloseDithering = ubo.Config0.y > 0.5?true:false; 
+
     const float exposure = 1.0;
     float minDistance = 14.0;
     float maxDistance = 25.0;
@@ -186,22 +189,25 @@ void main()
     // vec3 hdrColor = subpassLoad(samplerHdr).rgb;
     vec3 hdrColor = FXAA();
 
-    float depth = texture(samplerDepth, inUV).r;
-
-    if(depth <= 0.9999)
+    if(!visCloseDof)
     {
-        vec3 outOfFocusColor = Dilation(samplerSSRBlur);
-        float dofOffset = 0.01;
-        vec3 focusPoint = vec3(0.0, 0.0, 15.0);
+        float depth = texture(samplerDepth, inUV).r;
 
-        float blur =
-        smoothstep
-        ( minDistance
-        , maxDistance
-        , abs(abs(posCS.z) - focusPoint.z)
-        );
+        if(depth <= 0.9999)
+        {
+            vec3 outOfFocusColor = Dilation(samplerSSRBlur);
+            float dofOffset = 0.01;
+            vec3 focusPoint = vec3(0.0, 0.0, 15.0);
 
-        hdrColor = mix(hdrColor, outOfFocusColor, blur);
+            float blur =
+            smoothstep
+            ( minDistance
+            , maxDistance
+            , abs(abs(posCS.z) - focusPoint.z)
+            );
+
+            hdrColor = mix(hdrColor, outOfFocusColor, blur);
+        }
     }
 
     // vec3 hdrColor = texture(samplerSSRBlur, inUV).rgb;
@@ -224,5 +230,10 @@ void main()
     vign = pow(vign, power);
     mappedColor *= vign;
 
-    outColor = vec4(mappedColor + ScreenSpaceDither(inUV * vec2(ubo.WidthHeightExposureNo.x, ubo.WidthHeightExposureNo.y)), 1.0);
+    vec3 ditherColor = vec3(0.0);
+    if(!visCloseDithering)
+    {
+        ditherColor = ScreenSpaceDither(inUV * vec2(ubo.WidthHeightExposureNo.x, ubo.WidthHeightExposureNo.y));
+    }
+    outColor = vec4(mappedColor + ditherColor, 1.0);
 }
