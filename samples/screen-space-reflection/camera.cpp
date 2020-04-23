@@ -18,7 +18,7 @@ static const glm::vec2 SAMPLE_LOCS_16[16] = {
 	glm::vec2(-7.0f, 8.0f) / 8.0f,
 	glm::vec2(-5.0f, 2.0f) / 8.0f };
 
-void Camera::UpdateAspect(float width, float height)
+void Camera::Update(float width, float height, float deltaTime)
 {
 	aspect = width / height;
 	timer += 1;

@@ -26,7 +26,8 @@ layout(binding = 0, set = 1) uniform ShadowUniformBufferObject0
     mat4 proj;
     // split 0, split 1, split2, currentIndex
     vec4 splitPoints;
-    vec4 nothing;
+    // shadow map visualize, nothing, nothing, nothing
+    vec4 config0;
 	vec4 nothing1;
 	vec4 nothing2;
 } subo0; 
@@ -56,6 +57,8 @@ layout(binding = 0, set = 3) uniform ShadowUniformBufferObject2
 layout (location = 0) out vec4 outColor;
 
 const float PI = 3.1415927;
+const float LIGHT_SCALER = 2.5;
+
 const mat4 biasMat = mat4( 
 	0.5, 0.0, 0.0, 0.0,
 	0.0, 0.5, 0.0, 0.0,
@@ -283,7 +286,7 @@ void main()
     float roughness = normalRoughness.w;
 
     vec3 specular = vec3(0.0, 0.0, 0.0);
-    vec3 albedo = (NDotL * 5.0 * ubo.lightColor.rgb) * subpassLoad(samplerAlbedo).rgb;
+    vec3 albedo = (NDotL * LIGHT_SCALER * ubo.lightColor.rgb) * subpassLoad(samplerAlbedo).rgb;
     vec3 ambient = radiance * subpassLoad(samplerAlbedo).rgb;
     
     if(roughness < 0.5)

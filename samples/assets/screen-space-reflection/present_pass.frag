@@ -10,7 +10,11 @@ layout (binding = 1) uniform PresentUniformBufferObject
     vec4 Nothing0;
     vec4 Nothing1;
     vec4 Nothing2;
+    mat4 view;
+    mat4 proj;
 } ubo;
+
+layout (binding = 2) uniform sampler2D samplerDepth;
 
 layout (location = 0) out vec4 outColor;
 
@@ -74,6 +78,77 @@ vec3 FXAA()
     return rgbB; 
 }
 
+vec3 Dilation(sampler2D colorTexture)
+{
+    int   size         = 6;
+    float separation   = 1.0;
+    float minThreshold = 0.2;
+    float maxThreshold = 0.6;
+
+    vec2 texSize   = textureSize(colorTexture, 0).xy;
+    vec2 fragCoord = inUV * texSize;
+
+    vec4 fragColor = texture(colorTexture, fragCoord / texSize);
+
+    float  mx = 0.0;
+    vec4  cmx = fragColor;
+
+    for (int i = -size; i <= size; ++i) {
+        for (int j = -size; j <= size; ++j) {
+        // For a rectangular shape.
+        //if (false);
+
+        // For a diamond shape;
+        // if (!(abs(i) <= size - abs(j))) { continue; }
+
+        // For a circular shape.
+        if (!(distance(vec2(i, j), vec2(0, 0)) <= size)) { continue; }
+        vec2 targetUV =  ( fragCoord
+                + (vec2(i, j) * separation)
+                )
+                / texSize;
+
+        if(texture(samplerDepth, targetUV).r > 0.9999)
+        {
+            continue;
+        }
+
+        vec4 c =
+            texture
+            ( colorTexture
+            ,  targetUV
+            );
+
+        float mxt = dot(c.rgb, vec3(0.21, 0.72, 0.07));
+
+        if (mxt > mx) {
+            mx = mxt;
+            cmx = c;
+        }
+        }
+    }
+
+    fragColor.rgb =
+        mix
+        ( fragColor.rgb
+        , cmx.rgb
+        , smoothstep(minThreshold, maxThreshold, mx)
+        );
+
+    return fragColor.rgb;
+}
+
+vec3 ScreenSpaceToViewSpace(vec2 uv, mat4 projInv)
+{
+    float z = texture(samplerDepth, uv).r;
+     
+    vec4 clipSpacePosition = vec4(uv * 2.0 - 1.0, z, 1.0);
+    vec4 viewSpacePosition = projInv * clipSpacePosition;
+
+    viewSpacePosition /= viewSpacePosition.w;
+
+    return viewSpacePosition.xyz;
+}
 
 vec3 Uncharted2Tonemap(vec3 x)
 {
@@ -102,9 +177,33 @@ vec3 ScreenSpaceDither( vec2 vScreenPos )
 void main()
 {
     const float exposure = 1.0;
+    float minDistance = 14.0;
+    float maxDistance = 25.0;
+
+    mat4 projInv = inverse(ubo.proj);
+    vec3 posCS = ScreenSpaceToViewSpace(inUV, projInv);
 
     // vec3 hdrColor = subpassLoad(samplerHdr).rgb;
     vec3 hdrColor = FXAA();
+
+    float depth = texture(samplerDepth, inUV).r;
+
+    if(depth <= 0.9999)
+    {
+        vec3 outOfFocusColor = Dilation(samplerSSRBlur);
+        float dofOffset = 0.01;
+        vec3 focusPoint = vec3(0.0, 0.0, 15.0);
+
+        float blur =
+        smoothstep
+        ( minDistance
+        , maxDistance
+        , abs(abs(posCS.z) - focusPoint.z)
+        );
+
+        hdrColor = mix(hdrColor, outOfFocusColor, blur);
+    }
+
     // vec3 hdrColor = texture(samplerSSRBlur, inUV).rgb;
 
     // vec3 mappedColor = vec3(1.0) - exp(-hdrColor * exposure);

@@ -70,7 +70,7 @@ public:
         return jitterMatrix * glm::lookAt(Position, Position + Front, Up);
     }
 
-    void UpdateAspect(float width, float height);
+    void Update(float width, float height, float deltaTime);
 
     glm::mat4 GetProjectionMatrix() const
     {

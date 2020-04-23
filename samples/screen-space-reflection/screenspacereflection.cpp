@@ -38,7 +38,6 @@
 #define GATHER_PASS_INDEX 1
 #define SSR_PASS_INDEX 2
 #define SSR_BLUR_PASS_INDEX 3
-//#define SSR_GATHER_PASS_INDEX 3
 #define PRESENT_PASS_INDEX 4
 
 class ModelUniformBlock
@@ -78,6 +77,7 @@ struct GatheringPassUniformData
 
 struct SSRBlurPass;
 struct SSRPass;
+
 class Skybox;
 
 const int WIDTH = 800;
@@ -100,6 +100,7 @@ static PipelineObject* s_gatherPipelineObject = nullptr;
 static PipelineObject* s_presentPipelineObject = nullptr;
 static SSRPass* s_ssrPass = nullptr;
 static SSRBlurPass* s_ssrBlurPass = nullptr;
+
 
 static GFX::UniformLayout s_gatherUniformLayout;
 static GFX::Uniform s_gatherUniform;
@@ -298,6 +299,8 @@ struct PresentUniformBufferObject
 	glm::vec4 Nothing0;
 	glm::vec4 Nothing1;
 	glm::vec4 Nothing2;
+	glm::mat4 view;
+	glm::mat4 proj;
 };
 
 struct PresentUniform
@@ -331,6 +334,7 @@ struct PresentUniform
 		GFX::UniformLayoutDescription uniformLayoutDescription = {};
 		uniformLayoutDescription.AddUniformBinding(0, GFX::UniformType::SampledImage, GFX::ShaderStage::Fragment, 1);
 		uniformLayoutDescription.AddUniformBinding(1, GFX::UniformType::UniformBuffer, GFX::ShaderStage::Fragment, 1);
+		uniformLayoutDescription.AddUniformBinding(2, GFX::UniformType::SampledImage, GFX::ShaderStage::Fragment, 1);
 
 		uniformLayout = GFX::CreateUniformLayout(uniformLayoutDescription);
 	}
@@ -340,6 +344,7 @@ struct PresentUniform
 		GFX::UniformDescription uniformDesc = {};
 		uniformDesc.AddSampledAttachmentAttribute(0, s_meshRenderPass, SSR_BLUR_ATTACHMENT_INDEX, s_nearestSampler);
 		uniformDesc.AddBufferAttribute(1, uniformBuffer, 0, sizeof(PresentUniformBufferObject));
+		uniformDesc.AddSampledAttachmentAttribute(2, s_meshRenderPass, DEPTH_ATTACHMENT_INDEX, s_nearestSampler);
 
 		uniformDesc.SetUniformLayout(uniformLayout);
 		uniformDesc.SetStorageMode(GFX::UniformStorageMode::Dynamic);
@@ -356,6 +361,9 @@ struct PresentUniform
 	void UpdateUniform()
 	{
 		ubo.WidthHeightExposureNo = glm::vec4(s_width, s_height, s_exposure, 0.0f);
+		ubo.proj = s_camera->GetProjectionMatrix();
+		ubo.view = s_camera->GetViewMatrix();
+
 		GFX::UpdateUniformBuffer(uniform, 1, &ubo);
 	}
 
@@ -850,6 +858,7 @@ GFX::RenderPass CreateScreenSpaceReflectionRenderPass()
 	subpassPresent.colorAttachments.push_back(0);
 	//// Input SSR Composite Attachment
 	subpassPresent.inputAttachments.push_back(SSR_BLUR_ATTACHMENT_INDEX);
+	subpassPresent.inputAttachments.push_back(DEPTH_ATTACHMENT_INDEX);
 	subpassPresent.pipelineType = GFX::PipelineType::Graphics;
 
 	GFX::DependencyDescription dependencyDesc0 = {};
@@ -883,7 +892,6 @@ GFX::RenderPass CreateScreenSpaceReflectionRenderPass()
 	dependencyDesc3.dstStage = GFX::PipelineStage::FragmentShader;
 	dependencyDesc3.srcAccess = GFX::Access::ColorAttachmentWrite;
 	dependencyDesc3.dstAccess = GFX::Access::ShaderRead;
-
 
 	GFX::RenderPassDescription renderPassDesc = {};
 	renderPassDesc.width = s_width;
@@ -1128,7 +1136,7 @@ void ScreenSpaceReflectionExample::MainLoop()
 		{
 		}
 
-		s_camera->UpdateAspect(s_width, s_height);
+		s_camera->Update(s_width, s_height, deltaTime);
 
 		if (GFX::BeginFrame())
 		{
